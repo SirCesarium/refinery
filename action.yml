@@ -2,6 +2,16 @@ name: "Refinery-RS Build"
 description: "Surgical Rust build action for multiple targets with library and binary export."
 author: "SirCesarium"
 inputs:
+  publish-docker:
+    description: "Build and push a Docker image to GHCR"
+    required: false
+    default: "false"
+  docker-image-name:
+    description: "Custom name for the docker image"
+    required: false
+  github-token:
+    description: "GitHub Token for GHCR authentication"
+    required: false
   target:
     description: "The Rust target to build for"
     required: true
@@ -104,6 +114,31 @@ runs:
             cp "target/${{ inputs.target }}/release/lib${PKG_NAME//-/_}.a" "artifacts/lib${PKG_NAME//-/_}_${{ inputs.target }}.a"
           fi
         fi
+
+    - name: Publish to GitHub Packages (Docker)
+      if: inputs.publish-docker == "true"
+      shell: bash
+      run: |
+        IMAGE_NAME="${{ inputs.docker-image-name || github.repository }}"
+        REGISTRY="ghcr.io"
+        FULL_IMAGE_NAME="$REGISTRY/${IMAGE_NAME,,}"
+
+        echo "${{ inputs.github-token }}" | docker login $REGISTRY -u ${{ github.actor }} --password-stdin
+
+        if [ ! -f Dockerfile ]; then
+          cat <<EOF > Dockerfile.refinery
+        FROM debian:bookworm-slim
+        RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+        COPY artifacts/${{ inputs.binary-name || github.event.repository.name }}_${{ inputs.target }} /usr/local/bin/app
+        ENTRYPOINT ["/usr/local/bin/app"]
+        EOF
+          DOCKERFILE="Dockerfile.refinery"
+        else
+          DOCKERFILE="Dockerfile"
+        fi
+
+        docker build -t $FULL_IMAGE_NAME:latest -t $FULL_IMAGE_NAME:${{ github.sha }} -f $DOCKERFILE .
+        docker push $FULL_IMAGE_NAME --all-tags
 
 branding:
   icon: "package"
