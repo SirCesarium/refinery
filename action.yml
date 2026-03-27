@@ -116,7 +116,7 @@ runs:
         fi
 
     - name: Publish to GitHub Packages (Docker)
-      if: inputs.publish-docker == "true"
+      if: inputs.publish-docker == 'true'
       shell: bash
       run: |
         IMAGE_NAME="${{ inputs.docker-image-name || github.repository }}"
