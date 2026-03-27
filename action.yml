@@ -46,18 +46,18 @@ runs:
       uses: taiki-e/install-action@cross
 
     - name: Build
+      shell: bash
       run: |
         FLAGS=""
         if [ -n "${{ inputs.features }}" ]; then
           FLAGS="--features ${{ inputs.features }}"
         fi
-        
+
         if [ "${{ inputs.use-cross }}" = "true" ]; then
           cross build --release --target ${{ inputs.target }} $FLAGS
         else
           cargo build --release --target ${{ inputs.target }} $FLAGS
         fi
-      shell: bash
 
     - name: Package Artifacts
       shell: bash
@@ -65,21 +65,27 @@ runs:
         mkdir -p artifacts
         PKG_NAME="${{ inputs.package-name || github.event.repository.name }}"
         BIN_NAME="${{ inputs.binary-name || github.event.repository.name }}"
-        
+
         # Handle Windows extensions
         BIN_EXT=""
         if [[ "${{ inputs.target }}" == *"windows"* ]]; then
           BIN_EXT=".exe"
         fi
-        
+
         # Copy Binaries
         if [[ "${{ inputs.export-bins }}" == "true" ]]; then
-          SRC_BIN="target/${{ inputs.target }}/release/$BIN_NAME$BIN_EXT"
-          if [ -f "$SRC_BIN" ]; then
+          SRC_BIN=""
+          if [ -f "target/${{ inputs.target }}/release/$BIN_NAME$BIN_EXT" ]; then
+            SRC_BIN="target/${{ inputs.target }}/release/$BIN_NAME$BIN_EXT"
+          elif [ -f "target/release/$BIN_NAME$BIN_EXT" ]; then
+            SRC_BIN="target/release/$BIN_NAME$BIN_EXT"
+          fi
+
+          if [ -n "$SRC_BIN" ]; then
             cp "$SRC_BIN" "artifacts/${BIN_NAME}_${{ inputs.target }}$BIN_EXT"
           fi
         fi
-        
+
         # Copy Libraries
         if [[ "${{ inputs.export-libs }}" == "true" ]]; then
           # .so (Linux/Android)
@@ -98,6 +104,7 @@ runs:
             cp "target/${{ inputs.target }}/release/lib${PKG_NAME//-/_}.a" "artifacts/lib${PKG_NAME//-/_}_${{ inputs.target }}.a"
           fi
         fi
+
 branding:
   icon: 'package'
   color: 'orange'
