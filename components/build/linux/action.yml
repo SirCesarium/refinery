@@ -1,5 +1,5 @@
 name: 'Build Linux Binary'
-description: 'Compiles the Rust binary for Linux using MUSL 🐧'
+description: 'Compiles Rust binaries for various Linux architectures using MUSL 🐧'
 
 inputs:
   binary_name:
@@ -9,25 +9,33 @@ inputs:
     description: 'Features to enable'
     required: false
     default: ''
+  target:
+    description: 'Rust target triple (e.g. i686-unknown-linux-musl)'
+    required: false
+    default: 'x86_64-unknown-linux-musl'
+  suffix:
+    description: 'Suffix for the output file (e.g. -linux, -linux-i686)'
+    required: false
+    default: '-linux'
 
 runs:
   using: "composite"
   steps:
-    - name: Install MUSL Toolchain 🛠️
+    - name: Install Target 🛠️
       shell: bash
-      run: rustup target add x86_64-unknown-linux-musl
+      run: rustup target add ${{ inputs.target }}
 
     - name: Build Binary 🏗️
       shell: bash
       run: |
         if [ -z "${{ inputs.features }}" ]; then
-          cargo build --release --target x86_64-unknown-linux-musl
+          cargo build --release --target ${{ inputs.target }}
         else
-          cargo build --release --target x86_64-unknown-linux-musl --features "${{ inputs.features }}"
+          cargo build --release --target ${{ inputs.target }} --features "${{ inputs.features }}"
         fi
 
     - name: Prepare Artifact 📦
       shell: bash
       run: |
         mkdir -p output
-        cp target/x86_64-unknown-linux-musl/release/${{ inputs.binary_name }} output/${{ inputs.binary_name }}-linux-x86_64
+        cp target/${{ inputs.target }}/release/${{ inputs.binary_name }} output/${{ inputs.binary_name }}${{ inputs.suffix }}

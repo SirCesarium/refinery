@@ -1,0 +1,90 @@
+name: "Refinery-RS Build Orchestrator"
+description: "Orchestrates multi-platform Rust compilation"
+
+inputs:
+  binary_name:
+    description: "The name of your project binary"
+    required: true
+  features:
+    description: "Features to enable"
+    required: false
+    default: ""
+  linux_32bit:
+    description: "Enable build for i686"
+    required: false
+    default: "false"
+  linux_arm64:
+    description: "Enable build for ARM64"
+    required: false
+    default: "false"
+  linux_armv7:
+    description: "Enable build for ARMv7"
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    # ---------------------------------------------------------
+    # LINUX
+    # ---------------------------------------------------------
+    - name: Linux Suite Initialization
+      if: runner.os == 'Linux'
+      shell: bash
+      run: echo "Starting Linux build suite..."
+
+    - name: Linux Standard (x86_64)
+      if: runner.os == 'Linux'
+      uses: sircesarium/refinery-rs/components/build/linux@main
+      with:
+        binary_name: ${{ inputs.binary_name }}
+        features: ${{ inputs.features }}
+        target: 'x86_64-unknown-linux-musl'
+        suffix: '-linux'
+
+    - name: Linux Legacy (i686)
+      if: runner.os == 'Linux' && inputs.linux_32bit == 'true'
+      uses: sircesarium/refinery-rs/components/build/linux@main
+      with:
+        binary_name: ${{ inputs.binary_name }}
+        features: ${{ inputs.features }}
+        target: 'i686-unknown-linux-musl'
+        suffix: '-linux-i686'
+
+    - name: Linux ARM64
+      if: runner.os == 'Linux' && inputs.linux_arm64 == 'true'
+      uses: sircesarium/refinery-rs/components/build/linux@main
+      with:
+        binary_name: ${{ inputs.binary_name }}
+        features: ${{ inputs.features }}
+        target: 'aarch64-unknown-linux-musl'
+        suffix: '-linux-arm64'
+
+    - name: Linux ARMv7
+      if: runner.os == 'Linux' && inputs.linux_armv7 == 'true'
+      uses: sircesarium/refinery-rs/components/build/linux@main
+      with:
+        binary_name: ${{ inputs.binary_name }}
+        features: ${{ inputs.features }}
+        target: 'armv7-unknown-linux-musleabihf'
+        suffix: '-linux-armv7'
+
+    # ---------------------------------------------------------
+    # WINDOWS
+    # ---------------------------------------------------------
+    - name: Build Windows
+      if: runner.os == 'Windows'
+      uses: sircesarium/refinery-rs/components/build/windows@main
+      with:
+        binary_name: ${{ inputs.binary_name }}
+        features: ${{ inputs.features }}
+
+    # ---------------------------------------------------------
+    # MACOS SUITE
+    # ---------------------------------------------------------
+    - name: Build macOS
+      if: runner.os == 'macOS'
+      uses: sircesarium/refinery-rs/components/build/mac@main
+      with:
+        binary_name: ${{ inputs.binary_name }}
+        features: ${{ inputs.features }}
