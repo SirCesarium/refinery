@@ -1,197 +1,29 @@
-name: "Refinery-RS Build"
-description: "Refining Rust into universal artifacts."
-author: "SirCesarium"
+name: 'Refinery-RS Framework'
+description: 'All-in-one Rust compilation framework 🦀🏭'
+
 inputs:
-  publish-docker:
-    description: "Build and push a Docker image to GHCR"
-    required: false
-    default: "false"
-  docker-image-name:
-    description: "Custom name for the docker image"
-    required: false
-  github-token:
-    description: "GitHub Token for GHCR authentication"
-    required: false
-  target:
-    description: "The Rust target to build for"
+  binary_name:
+    description: 'The name of your project binary'
     required: true
-  package-name:
-    description: "The name of the package to build"
-    required: false
-  binary-name:
-    description: "The name of the binary to export"
-    required: false
-  export-libs:
-    description: "Export library files (.so, .dll, .dylib, .a)"
-    required: false
-    default: "true"
-  export-bins:
-    description: "Export binary files"
-    required: false
-    default: "true"
-  features:
-    description: "Rust features to enable"
-    required: false
-    default: ""
-  use-cross:
-    description: "Use cross-rs for building"
-    required: false
-    default: "false"
-  package:
-    description: "Enable packaging (.deb, .rpm, .msi)"
-    required: false
-    default: "false"
+    default: 'refinery'
 
 runs:
   using: "composite"
   steps:
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@v1
+    - name: Build for Linux 🐧
+      if: runner.os == 'Linux'
+      uses: ./.github/actions/components/build/linux
       with:
-        toolchain: stable
-        targets: ${{ inputs.target }}
+        binary_name: ${{ inputs.binary_name }}
 
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@v2.9.1
+    - name: Build for Windows 🪟
+      if: runner.os == 'Windows'
+      uses: ./.github/actions/components/build/windows
       with:
-        key: ${{ inputs.target }}-${{ inputs.binary-name }}
+        binary_name: ${{ inputs.binary_name }}
 
-    - name: Install Cross
-      if: inputs.use-cross == 'true'
-      uses: taiki-e/install-action@v2.71.1
+    - name: Build for macOS 🍎
+      if: runner.os == 'macOS'
+      uses: ./.github/actions/components/build/mac
       with:
-        tool: cross
-
-    - name: Build
-      shell: bash
-      run: |
-        FLAGS=""
-        if [ "${{ inputs.features }}" = "all-features" ]; then
-          FLAGS="--all-features"
-        elif [ -n "${{ inputs.features }}" ]; then
-          FLAGS="--features ${{ inputs.features }}"
-        fi
-
-        BIN_FLAG=""
-        if [ -n "${{ inputs.binary-name }}" ]; then
-          BIN_FLAG="--bin ${{ inputs.binary-name }}"
-        fi
-
-        if [ "${{ inputs.use-cross }}" = "true" ]; then
-          cross build --release --target ${{ inputs.target }} $BIN_FLAG $FLAGS
-        else
-          cargo build --release --target ${{ inputs.target }} $BIN_FLAG $FLAGS
-        fi
-
-    - name: Package Artifacts
-      shell: bash
-      run: |
-        mkdir -p artifacts
-        PKG_NAME="${{ inputs.package-name || github.event.repository.name }}"
-        BIN_NAME="${{ inputs.binary-name || github.event.repository.name }}"
-        TARGET="${{ inputs.target }}"
-
-        # Mapping System
-        OS="unknown"
-        [[ "$TARGET" == *"linux"* ]] && OS="linux"
-        [[ "$TARGET" == *"windows"* ]] && OS="windows"
-        [[ "$TARGET" == *"apple-darwin"* ]] && OS="macos"
-
-        # Mapping Arch
-        ARCH="unknown"
-        [[ "$TARGET" == *"x86_64"* ]] && ARCH="x86_64"
-        [[ "$TARGET" == *"aarch64"* ]] && ARCH="arm64"
-        [[ "$TARGET" == *"i686"* ]] && ARCH="x86"
-
-        # Extensions
-        BIN_EXT=""
-        [[ "$OS" == "windows" ]] && BIN_EXT=".exe"
-
-        if [[ "${{ inputs.export-bins }}" == "true" ]]; then
-          SRC_BIN=""
-          if [ -f "target/$TARGET/release/$BIN_NAME$BIN_EXT" ]; then
-            SRC_BIN="target/$TARGET/release/$BIN_NAME$BIN_EXT"
-          elif [ -f "target/release/$BIN_NAME$BIN_EXT" ]; then
-            SRC_BIN="target/release/$BIN_NAME$BIN_EXT"
-          fi
-
-          if [ -n "$SRC_BIN" ]; then
-            # Format: name-system-arch
-            DEST_NAME="$BIN_NAME-$OS-$ARCH$BIN_EXT"
-            cp "$SRC_BIN" "artifacts/$DEST_NAME"
-            echo "✅ Exported binary: $DEST_NAME"
-          fi
-        fi
-
-        if [[ "${{ inputs.export-libs }}" == "true" ]]; then
-          LIB_STEM="${PKG_NAME//-/_}"
-          [ -f "target/$TARGET/release/lib$LIB_STEM.so" ] && cp "target/$TARGET/release/lib$LIB_STEM.so" "artifacts/$LIB_STEM-$OS-$ARCH.so"
-          [ -f "target/$TARGET/release/lib$LIB_STEM.dylib" ] && cp "target/$TARGET/release/lib$LIB_STEM.dylib" "artifacts/$LIB_STEM-$OS-$ARCH.dylib"
-          [ -f "target/$TARGET/release/lib$LIB_STEM.a" ] && cp "target/$TARGET/release/lib$LIB_STEM.a" "artifacts/$LIB_STEM-$OS-$ARCH.a"
-          [ -f "target/$TARGET/release/$LIB_STEM.dll" ] && cp "target/$TARGET/release/$LIB_STEM.dll" "artifacts/$LIB_STEM-$OS-$ARCH.dll"
-          echo "✅ Exported libraries for $OS-$ARCH"
-        fi
-
-    - name: Install Packaging Tools
-      if: inputs.package == 'true'
-      uses: taiki-e/install-action@v2.71.1
-      with:
-        tool: ${{ runner.os == 'Linux' && 'cargo-deb,cargo-generate-rpm' || (runner.os == 'Windows' && 'cargo-wix' || '') }}
-
-    - name: Package (.deb, .rpm, .msi)
-      if: inputs.package == 'true'
-      shell: bash
-      run: |
-        TARGET="${{ inputs.target }}"
-        if [[ "${{ runner.os }}" == "Linux" ]]; then
-          echo "📦 Packaging for Debian/RPM..."
-          cargo deb --target "$TARGET" --no-build
-          cargo generate-rpm --target "$TARGET"
-          cp target/"$TARGET"/debian/*.deb artifacts/ 2>/dev/null || true
-          cp target/generate-rpm/*.rpm artifacts/ 2>/dev/null || cp target/"$TARGET"/generate-rpm/*.rpm artifacts/ 2>/dev/null || true
-        fi
-
-        if [[ "${{ runner.os }}" == "Windows" ]]; then
-          echo "📦 Packaging for MSI..."
-          mkdir -p target/"$TARGET"/release
-          cp artifacts/*.exe target/"$TARGET"/release/ 2>/dev/null || true
-          cargo wix --target "$TARGET" --no-build -o artifacts/
-        fi
-
-    - name: Publish to GitHub Packages (Docker)
-      if: inputs.publish-docker == 'true'
-      shell: bash
-      run: |
-        BIN_NAME="${{ inputs.binary-name || github.event.repository.name }}"
-        TARGET="${{ inputs.target }}"
-        
-        # Re-map OS/ARCH for filename
-        OS="linux"
-        ARCH="x86_64"
-        [[ "$TARGET" == *"aarch64"* ]] && ARCH="arm64"
-        
-        FILE_NAME="$BIN_NAME-$OS-$ARCH"
-        
-        IMAGE_NAME="${{ inputs.docker-image-name || github.repository }}"
-        REGISTRY="ghcr.io"
-        FULL_IMAGE_NAME="$REGISTRY/${IMAGE_NAME,,}"
-        echo "${{ inputs.github-token }}" | docker login $REGISTRY -u ${{ github.actor }} --password-stdin
-        
-        if [ ! -f Dockerfile ]; then
-          cat <<EOF > Dockerfile.refinery
-        FROM debian:bookworm-slim
-        RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
-        COPY artifacts/$FILE_NAME /usr/local/bin/app
-        RUN chmod +x /usr/local/bin/app
-        ENTRYPOINT ["/usr/local/bin/app"]
-        EOF
-          DOCKERFILE="Dockerfile.refinery"
-        else
-          DOCKERFILE="Dockerfile"
-        fi
-        docker build -t $FULL_IMAGE_NAME:latest -t $FULL_IMAGE_NAME:${{ github.sha }} -f $DOCKERFILE .
-        docker push $FULL_IMAGE_NAME --all-tags
-
-branding:
-  icon: "package"
-  color: "orange"
+        binary_name: ${{ inputs.binary_name }}

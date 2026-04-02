@@ -1,0 +1,24 @@
+name: 'Build Linux Binary'
+description: 'Compiles the Rust binary for Linux using MUSL 🐧'
+
+inputs:
+  binary_name:
+    description: 'Name of the resulting binary'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install MUSL Toolchain 🛠️
+      shell: bash
+      run: rustup target add x86_64-unknown-linux-musl
+
+    - name: Build Binary 🏗️
+      shell: bash
+      run: cargo build --release --target x86_64-unknown-linux-musl
+
+    - name: Prepare Artifact 📦
+      shell: bash
+      run: |
+        mkdir -p output
+        cp target/x86_64-unknown-linux-musl/release/${{ inputs.binary_name }} output/
