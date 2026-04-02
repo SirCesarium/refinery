@@ -37,36 +37,49 @@ inputs:
     description: "Use cross-rs for building"
     required: false
     default: "false"
+  package:
+    description: "Enable packaging (.deb, .rpm, .msi)"
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
   steps:
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@v1
       with:
         targets: ${{ inputs.target }}
 
     - name: Rust Cache
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@v2.9.1
       with:
-        key: ${{ inputs.target }}
+        key: ${{ inputs.target }}-${{ inputs.binary-name }}
 
     - name: Install Cross
       if: inputs.use-cross == 'true'
-      uses: taiki-e/install-action@cross
+      uses: taiki-e/install-action@v2.71.0
+      with:
+        tool: cross
 
     - name: Build
       shell: bash
       run: |
         FLAGS=""
-        if [ -n "${{ inputs.features }}" ]; then
+        if [ "${{ inputs.features }}" = "all-features" ]; then
+          FLAGS="--all-features"
+        elif [ -n "${{ inputs.features }}" ]; then
           FLAGS="--features ${{ inputs.features }}"
         fi
 
+        BIN_FLAG=""
+        if [ -n "${{ inputs.binary-name }}" ]; then
+          BIN_FLAG="--bin ${{ inputs.binary-name }}"
+        fi
+
         if [ "${{ inputs.use-cross }}" = "true" ]; then
-          cross build --release --target ${{ inputs.target }} $FLAGS
+          cross build --release --target ${{ inputs.target }} $BIN_FLAG $FLAGS
         else
-          cargo build --release --target ${{ inputs.target }} $FLAGS
+          cargo build --release --target ${{ inputs.target }} $BIN_FLAG $FLAGS
         fi
 
     - name: Package Artifacts
@@ -75,68 +88,89 @@ runs:
         mkdir -p artifacts
         PKG_NAME="${{ inputs.package-name || github.event.repository.name }}"
         BIN_NAME="${{ inputs.binary-name || github.event.repository.name }}"
+        TARGET="${{ inputs.target }}"
 
-        # Handle Windows extensions
+        # Mapping System
+        OS="unknown"
+        [[ "$TARGET" == *"linux"* ]] && OS="linux"
+        [[ "$TARGET" == *"windows"* ]] && OS="windows"
+        [[ "$TARGET" == *"apple-darwin"* ]] && OS="macos"
+
+        # Mapping Arch
+        ARCH="unknown"
+        [[ "$TARGET" == *"x86_64"* ]] && ARCH="x86_64"
+        [[ "$TARGET" == *"aarch64"* ]] && ARCH="arm64"
+        [[ "$TARGET" == *"i686"* ]] && ARCH="x86"
+
+        # Extensions
         BIN_EXT=""
-        if [[ "${{ inputs.target }}" == *"windows"* ]]; then
-          BIN_EXT=".exe"
-        fi
+        [[ "$OS" == "windows" ]] && BIN_EXT=".exe"
 
-        # Copy Binaries
         if [[ "${{ inputs.export-bins }}" == "true" ]]; then
           SRC_BIN=""
-          if [ -f "target/${{ inputs.target }}/release/$BIN_NAME$BIN_EXT" ]; then
-            SRC_BIN="target/${{ inputs.target }}/release/$BIN_NAME$BIN_EXT"
+          if [ -f "target/$TARGET/release/$BIN_NAME$BIN_EXT" ]; then
+            SRC_BIN="target/$TARGET/release/$BIN_NAME$BIN_EXT"
           elif [ -f "target/release/$BIN_NAME$BIN_EXT" ]; then
             SRC_BIN="target/release/$BIN_NAME$BIN_EXT"
           fi
 
           if [ -n "$SRC_BIN" ]; then
-            cp "$SRC_BIN" "artifacts/${BIN_NAME}_${{ inputs.target }}$BIN_EXT"
+            # Format: name-system-arch
+            DEST_NAME="$BIN_NAME-$OS-$ARCH$BIN_EXT"
+            cp "$SRC_BIN" "artifacts/$DEST_NAME"
+            echo "✅ Exported binary: $DEST_NAME"
           fi
         fi
 
-        # Copy Libraries
         if [[ "${{ inputs.export-libs }}" == "true" ]]; then
-          # .so (Linux/Android)
-          if [[ -f "target/${{ inputs.target }}/release/lib${PKG_NAME//-/_}.so" ]]; then
-            cp "target/${{ inputs.target }}/release/lib${PKG_NAME//-/_}.so" "artifacts/lib${PKG_NAME//-/_}_${{ inputs.target }}.so"
-          fi
-          # .dll (Windows)
-          if [[ -f "target/${{ inputs.target }}/release/${PKG_NAME//-/_}.dll" ]]; then
-            cp "target/${{ inputs.target }}/release/${PKG_NAME//-/_}.dll" "artifacts/${PKG_NAME//-/_}_${{ inputs.target }}.dll"
-          fi
-          # .dylib / .a (macOS)
-          if [[ -f "target/${{ inputs.target }}/release/lib${PKG_NAME//-/_}.dylib" ]]; then
-            cp "target/${{ inputs.target }}/release/lib${PKG_NAME//-/_}.dylib" "artifacts/lib${PKG_NAME//-/_}_${{ inputs.target }}.dylib"
-          fi
-          if [[ -f "target/${{ inputs.target }}/release/lib${PKG_NAME//-/_}.a" ]]; then
-            cp "target/${{ inputs.target }}/release/lib${PKG_NAME//-/_}.a" "artifacts/lib${PKG_NAME//-/_}_${{ inputs.target }}.a"
-          fi
+          LIB_STEM="${PKG_NAME//-/_}"
+          [ -f "target/$TARGET/release/lib$LIB_STEM.so" ] && cp "target/$TARGET/release/lib$LIB_STEM.so" "artifacts/$LIB_STEM-$OS-$ARCH.so"
+          [ -f "target/$TARGET/release/lib$LIB_STEM.dylib" ] && cp "target/$TARGET/release/lib$LIB_STEM.dylib" "artifacts/$LIB_STEM-$OS-$ARCH.dylib"
+          [ -f "target/$TARGET/release/lib$LIB_STEM.a" ] && cp "target/$TARGET/release/lib$LIB_STEM.a" "artifacts/$LIB_STEM-$OS-$ARCH.a"
+          [ -f "target/$TARGET/release/$LIB_STEM.dll" ] && cp "target/$TARGET/release/$LIB_STEM.dll" "artifacts/$LIB_STEM-$OS-$ARCH.dll"
+          echo "✅ Exported libraries for $OS-$ARCH"
         fi
+
+    - name: Run External Packaging Scripts
+      if: inputs.package == 'true'
+      shell: bash
+      run: |
+        chmod +x ${{ github.action_path }}/scripts/setup_tools.sh
+        chmod +x ${{ github.action_path }}/scripts/package.sh
+        ${{ github.action_path }}/scripts/setup_tools.sh
+        ${{ github.action_path }}/scripts/package.sh "${{ inputs.target }}" "${{ inputs.package-name || github.event.repository.name }}" "${{ inputs.binary-name || github.event.repository.name }}" "${{ runner.os == 'Windows' && 'windows-latest' || (runner.os == 'Linux' && 'ubuntu-latest' || 'macos-latest') }}"
 
     - name: Publish to GitHub Packages (Docker)
       if: inputs.publish-docker == 'true'
       shell: bash
       run: |
+        BIN_NAME="${{ inputs.binary-name || github.event.repository.name }}"
+        TARGET="${{ inputs.target }}"
+        
+        # Re-map OS/ARCH for filename
+        OS="linux"
+        ARCH="x86_64"
+        [[ "$TARGET" == *"aarch64"* ]] && ARCH="arm64"
+        
+        FILE_NAME="$BIN_NAME-$OS-$ARCH"
+        
         IMAGE_NAME="${{ inputs.docker-image-name || github.repository }}"
         REGISTRY="ghcr.io"
         FULL_IMAGE_NAME="$REGISTRY/${IMAGE_NAME,,}"
-
         echo "${{ inputs.github-token }}" | docker login $REGISTRY -u ${{ github.actor }} --password-stdin
-
+        
         if [ ! -f Dockerfile ]; then
           cat <<EOF > Dockerfile.refinery
         FROM debian:bookworm-slim
         RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
-        COPY artifacts/${{ inputs.binary-name || github.event.repository.name }}_${{ inputs.target }} /usr/local/bin/app
+        COPY artifacts/$FILE_NAME /usr/local/bin/app
+        RUN chmod +x /usr/local/bin/app
         ENTRYPOINT ["/usr/local/bin/app"]
         EOF
           DOCKERFILE="Dockerfile.refinery"
         else
           DOCKERFILE="Dockerfile"
         fi
-
         docker build -t $FULL_IMAGE_NAME:latest -t $FULL_IMAGE_NAME:${{ github.sha }} -f $DOCKERFILE .
         docker push $FULL_IMAGE_NAME --all-tags
 
