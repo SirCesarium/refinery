@@ -27,7 +27,9 @@ runs:
         components: rustfmt, clippy
 
     - name: Rust Cache
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@v2.9.1
+      with:
+        key: ${{ inputs.target }}-${{ inputs.binary-name }}
 
     - name: Install Sweet (swt)
       if: ${{ inputs.enable-sweet == 'true' }}
