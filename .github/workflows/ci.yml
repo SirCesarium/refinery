@@ -1,0 +1,19 @@
+name: CI Validation
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - name: Refinery CI
+        uses: sircesarium/refinery-rs/ci@v2.0
+        with:
+          enable-sweet: true
+          enable-clippy: false
+          enable-fmt: true

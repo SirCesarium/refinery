@@ -64,6 +64,10 @@ on:
         type: string
         required: false
         default: ""
+      package:
+        description: "Enable packaging (.deb, .rpm, .msi)"
+        type: boolean
+        default: true
 
     secrets:
       CRATES_IO_TOKEN:
@@ -163,70 +167,19 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Build and Package
+        uses: sircesarium/refinery-rs@main
         with:
-          targets: ${{ matrix.target }}
-
-      - name: Install Cross
-        if: matrix.use-cross
-        uses: taiki-e/install-action@cross
-
-      - name: Build
-        run: |
-          FLAGS=""
-          if [ -n "${{ inputs.features }}" ]; then
-            FLAGS="--features ${{ inputs.features }}"
-          fi
-          
-          if [ "${{ matrix.use-cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }} $FLAGS
-          else
-            cargo build --release --target ${{ matrix.target }} $FLAGS
-          fi
-        shell: bash
-
-      - name: Package Artifacts
-        shell: bash
-        run: |
-          mkdir -p artifacts
-          PKG_NAME="${{ inputs.package-name || github.event.repository.name }}"
-          BIN_NAME="${{ inputs.binary-name || github.event.repository.name }}"
-          
-          # Handle Windows extensions
-          BIN_EXT=""
-          if [[ "${{ matrix.target }}" == *"windows"* ]]; then
-            BIN_EXT=".exe"
-          fi
-          
-          # Copy Binaries
-          if [[ "${{ inputs.export-bins }}" == "true" ]]; then
-            SRC_BIN="target/${{ matrix.target }}/release/$BIN_NAME$BIN_EXT"
-            if [ -f "$SRC_BIN" ]; then
-              cp "$SRC_BIN" "artifacts/${BIN_NAME}_${{ matrix.target }}$BIN_EXT"
-            fi
-          fi
-          
-          # Copy Libraries
-          if [[ "${{ inputs.export-libs }}" == "true" ]]; then
-            # .so (Linux/Android)
-            if [[ -f "target/${{ matrix.target }}/release/lib${PKG_NAME//-/_}.so" ]]; then
-              cp "target/${{ matrix.target }}/release/lib${PKG_NAME//-/_}.so" "artifacts/lib${PKG_NAME//-/_}_${{ matrix.target }}.so"
-            fi
-            # .dll (Windows)
-            if [[ -f "target/${{ matrix.target }}/release/${PKG_NAME//-/_}.dll" ]]; then
-              cp "target/${{ matrix.target }}/release/${PKG_NAME//-/_}.dll" "artifacts/${PKG_NAME//-/_}_${{ matrix.target }}.dll"
-            fi
-            # .dylib / .a (macOS)
-            if [[ -f "target/${{ matrix.target }}/release/lib${PKG_NAME//-/_}.dylib" ]]; then
-              cp "target/${{ matrix.target }}/release/lib${PKG_NAME//-/_}.dylib" "artifacts/lib${PKG_NAME//-/_}_${{ matrix.target }}.dylib"
-            fi
-            if [[ -f "target/${{ matrix.target }}/release/lib${PKG_NAME//-/_}.a" ]]; then
-              cp "target/${{ matrix.target }}/release/lib${PKG_NAME//-/_}.a" "artifacts/lib${PKG_NAME//-/_}_${{ matrix.target }}.a"
-            fi
-          fi
+          target: ${{ matrix.target }}
+          package-name: ${{ inputs.package-name }}
+          binary-name: ${{ inputs.binary-name }}
+          export-libs: ${{ inputs.export-libs }}
+          export-bins: ${{ inputs.export-bins }}
+          features: ${{ inputs.features }}
+          use-cross: ${{ matrix.use-cross }}
+          package: ${{ inputs.package }}
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -240,7 +193,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
 
       - uses: actions/download-artifact@v4
         with:
