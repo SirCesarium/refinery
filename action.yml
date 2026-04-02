@@ -5,7 +5,13 @@ inputs:
   binary_name:
     description: 'The name of your project binary'
     required: true
-    default: 'refinery'
+  features:
+    description: 'Space separated list of features to enable'
+    required: false
+    default: ''
+  github_token:
+    description: 'Token to upload to release'
+    required: true
 
 runs:
   using: "composite"
@@ -15,15 +21,25 @@ runs:
       uses: sircesarium/refinery-rs/components/build/linux@main
       with:
         binary_name: ${{ inputs.binary_name }}
+        features: ${{ inputs.features }}
 
     - name: Build for Windows 🪟
       if: runner.os == 'Windows'
       uses: sircesarium/refinery-rs/components/build/windows@main
       with:
         binary_name: ${{ inputs.binary_name }}
+        features: ${{ inputs.features }}
 
     - name: Build for macOS 🍎
       if: runner.os == 'macOS'
       uses: sircesarium/refinery-rs/components/build/mac@main
       with:
         binary_name: ${{ inputs.binary_name }}
+        features: ${{ inputs.features }}
+
+    - name: Auto-Release 🏷️
+      uses: softprops/action-gh-release@v2
+      with:
+        files: output/*
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
