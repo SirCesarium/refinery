@@ -1,0 +1,39 @@
+name: "Refinery-RS Linux Packager"
+description: "Generates .deb and .rpm installers for x86_64 Linux 🐧"
+
+inputs:
+  binary_name:
+    description: "The name of the binary to package"
+    required: true
+  output_dir:
+    description: "Final directory for the packages"
+    default: "output/packages"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Packaging Tools 🛠️
+      shell: bash
+      run: |
+        if ! command -v cargo-deb &> /dev/null; then
+          cargo install cargo-deb --quiet
+        fi
+        if ! command -v cargo-generate-rpm &> /dev/null; then
+          cargo install cargo-generate-rpm --quiet
+        fi
+
+    - name: Create Output Directory
+      shell: bash
+      run: mkdir -p ${{ inputs.output_dir }}
+
+    - name: Package .deb (Debian/Ubuntu) 📦
+      shell: bash
+      run: |
+        echo "Refinery: Packaging DEB..."
+        cargo deb --no-build --output ${{ inputs.output_dir }}/
+
+    - name: Package .rpm (Fedora/RHEL) 📦
+      shell: bash
+      run: |
+        echo "Refinery: Packaging RPM..."
+        cargo generate-rpm --output ${{ inputs.output_dir }}/${{ inputs.binary_name }}.rpm

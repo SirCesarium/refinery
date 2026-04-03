@@ -36,6 +36,10 @@ inputs:
     description: "Enable build for macOS Intel"
     required: false
     default: "false"
+  linux_packaging:
+    description: "Enable .deb and .rpm packaging for Linux"
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
@@ -51,6 +55,7 @@ runs:
         windows_32bit: ${{ inputs.windows_32bit }}
         windows_arm64: ${{ inputs.windows_arm64 }}
         macos_x86: ${{ inputs.macos_x86 }}
+        linux_packaging: ${{ inputs.linux_packaging }}
 
     - name: Auto-Release 🏷️
       uses: softprops/action-gh-release@v2

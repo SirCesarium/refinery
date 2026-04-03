@@ -1,0 +1,30 @@
+name: "Refinery-RS Crates.io Publisher"
+description: "Publishes your Rust crate to crates.io with safety checks 🦀📦"
+
+inputs:
+  cargo_token:
+    description: "Your crates.io API token"
+    required: true
+  dry_run:
+    description: "Verify the publish without actually uploading"
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Rust Toolchain 🛠️
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Publish to Crates.io 🚀
+      shell: bash
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ inputs.cargo_token }}
+      run: |
+        if [ "${{ inputs.dry_run }}" == "true" ]; then
+          echo "Refinery: Running dry-run check..."
+          cargo publish --dry-run
+        else
+          echo "Refinery: Publishing to crates.io..."
+          cargo publish --no-verify || cargo publish
+        fi

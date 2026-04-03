@@ -33,6 +33,11 @@ inputs:
     description: "Enable build for macOS Intel"
     required: false
     default: "false"
+  
+  linux_packaging:
+    description: "Enable .deb and .rpm packaging for Linux x86_64"
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
@@ -80,6 +85,13 @@ runs:
         features: ${{ inputs.features }}
         target: "armv7-unknown-linux-musleabihf"
         suffix: "-linux-armv7"
+    
+    - name: Linux Packaging (.deb, .rpm) 📦
+      if: runner.os == 'Linux' && inputs.linux_packaging == 'true'
+      uses: sircesarium/refinery-rs/components/packaging/linux@main
+      with:
+        binary_name: ${{ inputs.binary_name }}
+        output_dir: "output"
 
     # ---------------------------------------------------------
     # WINDOWS
