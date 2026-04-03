@@ -9,8 +9,8 @@ if ! cargo fmt --check; then
 fi
 echo "Formatting check passed."
 
-echo "Running cargo clippy --all-targets --all-features -- -D warnings..."
-if ! cargo clippy --all-targets --all-features -- -D warnings; then
+echo "Running cargo clippy -- -D warnings..."
+if ! cargo clippy --all-targets --all-features -- -D warnings -D clippy::nursery; then
     echo "Clippy check failed. Please fix the reported errors."
     exit 1
 fi
