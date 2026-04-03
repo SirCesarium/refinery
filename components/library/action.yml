@@ -44,4 +44,5 @@ runs:
       if: inputs.generate_headers == 'true'
       uses: sircesarium/refinery-rs/components/library/headers@main
       with:
+        binary_name: ${{ inputs.binary_name }}
         output_dir: ${{ inputs.output_dir }}

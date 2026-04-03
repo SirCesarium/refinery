@@ -1,6 +1,9 @@
 name: "Refinery-RS Header Generator"
 description: "Generates C language headers for cross-language interoperability"
 inputs:
+  binary_name:
+    description: "The name of the library to generate headers for"
+    required: true
   output_dir:
     description: "Directory where the .h file will be stored"
     default: "output"
@@ -17,5 +20,8 @@ runs:
       shell: bash
       run: |
         mkdir -p ${{ inputs.output_dir }}/include
-        cbindgen --config cbindgen.toml --output ${{ inputs.output_dir }}/include/refinery_sdk.h || \
-        cbindgen --lang c --output ${{ inputs.output_dir }}/include/refinery_sdk.h
+        # Convertimos guiones a guiones bajos para el nombre del archivo .h (estándar C)
+        HEADER_NAME=$(echo "${{ inputs.binary_name }}" | tr '-' '_')
+        
+        cbindgen --config cbindgen.toml --output ${{ inputs.output_dir }}/include/${HEADER_NAME}.h || \
+        cbindgen --lang c --output ${{ inputs.output_dir }}/include/${HEADER_NAME}.h
