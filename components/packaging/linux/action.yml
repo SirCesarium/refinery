@@ -30,10 +30,10 @@ runs:
       shell: bash
       run: |
         echo "Refinery: Packaging DEB..."
-        cargo deb --no-build --output ${{ inputs.output_dir }}/
+        cargo deb --no-build --target x86_64-unknown-linux-musl --output ${{ inputs.output_dir }}/
 
     - name: Package .rpm (Fedora/RHEL) 📦
       shell: bash
       run: |
         echo "Refinery: Packaging RPM..."
-        cargo generate-rpm --output ${{ inputs.output_dir }}/${{ inputs.binary_name }}.rpm
+        cargo generate-rpm --target x86_64-unknown-linux-musl --output ${{ inputs.output_dir }}/${{ inputs.binary_name }}.rpm
