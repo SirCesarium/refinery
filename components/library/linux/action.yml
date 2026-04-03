@@ -29,19 +29,19 @@ runs:
     - name: Build Multi-Arch Libraries
       shell: bash
       run: |
-        export CROSS_RUSTFLAGS="-C target-feature=-crt-static"
-        
         TARGETS=("x86_64-unknown-linux-musl")
         if [ "${{ inputs.linux_32bit }}" == "true" ]; then TARGETS+=("i686-unknown-linux-musl"); fi
         if [ "${{ inputs.linux_arm64 }}" == "true" ]; then TARGETS+=("aarch64-unknown-linux-musl"); fi
         if [ "${{ inputs.linux_armv7 }}" == "true" ]; then TARGETS+=("armv7-unknown-linux-musleabihf"); fi
 
         for TARGET in "${TARGETS[@]}"; do
-          cross build --release --target $TARGET
+          echo "🏗️ Building for $TARGET..."
+          
+          RUSTFLAGS="-C target-feature=-crt-static" cross build --release --target $TARGET
 
           LIB_DIR="${{ inputs.output_dir }}/lib/$TARGET"
           mkdir -p "$LIB_DIR"
           
-          cp "target/$TARGET/release/lib${{ inputs.binary_name }}.so" "$LIB_DIR/lib${{ inputs.binary_name }}-$TARGET.so" || true
-          cp "target/$TARGET/release/lib${{ inputs.binary_name }}.a" "$LIB_DIR/lib${{ inputs.binary_name }}-$TARGET.a" || true
+          cp target/$TARGET/release/lib${{ inputs.binary_name }}.so "$LIB_DIR/lib${{ inputs.binary_name }}-$TARGET.so" 2>/dev/null || echo "SO not found"
+          cp target/$TARGET/release/lib${{ inputs.binary_name }}.a "$LIB_DIR/lib${{ inputs.binary_name }}-$TARGET.a" 2>/dev/null || echo "A not found"
         done
