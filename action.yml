@@ -53,20 +53,12 @@ runs:
         macos_x86: ${{ inputs.macos_x86 }}
 
     - name: Auto-Release 🏷️
-      shell: bash
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.ref_name }}
+        target_commitish: ${{ github.sha }}
+        files: output/*
+        fail_on_unmatched_files: false
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ inputs.github_token }}
-      run: |
-        if ! err_msg=$(gh release create ${{ github.ref_name }} --target ${{ github.sha }} --notes 'Release ${{ github.ref_name }}' 2>&1); then
-          if [[ ! "$err_msg" == *"already exists"* ]]; then
-            echo "::error::Release creation failed: $err_msg"
-            exit 1
-          fi
-        fi
-
-        for i in {1..3}; do
-          gh release upload ${{ github.ref_name }} output/* --clobber && break || {
-            if [ $i -eq 3 ]; then exit 1; fi
-            sleep 5
-          }
-        done
