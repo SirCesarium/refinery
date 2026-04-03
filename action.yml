@@ -86,6 +86,9 @@ runs:
         linux_32bit: ${{ inputs.linux_32bit }}
         linux_arm64: ${{ inputs.linux_arm64 }}
         linux_armv7: ${{ inputs.linux_armv7 }}
+        windows_32bit: ${{ inputs.windows_32bit }}
+        windows_arm64: ${{ inputs.windows_arm64 }}
+        macos_x86: ${{ inputs.macos_x86 }}
 
     - name: Auto-Release 🏷️
       uses: softprops/action-gh-release@v2

@@ -25,6 +25,18 @@ inputs:
     description: "Build library for ARMv7 (32-bit ARM Linux)"
     required: false
     default: "false"
+  windows_32bit:
+    description: "Build library for Windows x86"
+    required: false
+    default: "false"
+  windows_arm64:
+    description: "Build library for Windows ARM64"
+    required: false
+    default: "false"
+  macos_x86:
+    description: "Build library for macOS Intel"
+    required: false
+    default: "false"
 runs:
   using: "composite"
   steps:
