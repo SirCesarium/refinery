@@ -30,7 +30,10 @@ runs:
       shell: bash
       run: |
         echo "Refinery: Packaging DEB..."
+        # Generamos el deb
         cargo deb --no-build --target x86_64-unknown-linux-musl --output ${{ inputs.output_dir }}/
+
+        mv ${{ inputs.output_dir }}/*.deb ${{ inputs.output_dir }}/${{ inputs.binary_name }}.deb
 
     - name: Package .rpm (Fedora/RHEL) 📦
       shell: bash
