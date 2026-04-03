@@ -34,7 +34,7 @@ runs:
 
     - name: Build macOS Library
       if: runner.os == 'macOS'
-      uses: sircesarium/refinery-rs/components/library/macos@main
+      uses: sircesarium/refinery-rs/components/library/mac@main
       with:
         binary_name: ${{ inputs.binary_name }}
         target: ${{ inputs.target }}
