@@ -1,5 +1,5 @@
 name: "Build Windows Binary"
-description: "Compiles the Rust binary for Windows 64-bit 🪟"
+description: "Compiles the Rust binary for Windows 🪟"
 
 inputs:
   binary_name:
@@ -9,21 +9,33 @@ inputs:
     description: "Features to enable"
     required: false
     default: ""
+  target:
+    description: "Rust target triple"
+    required: false
+    default: "x86_64-pc-windows-msvc"
+  suffix:
+    description: "Suffix for the output file"
+    required: false
+    default: "-windows-x86_64"
 
 runs:
   using: "composite"
   steps:
+    - name: Install Target 🛠️
+      shell: bash
+      run: rustup target add ${{ inputs.target }}
+
     - name: Build Binary 🏗️
       shell: bash
       run: |
         if [ -z "${{ inputs.features }}" ]; then
-          cargo build --release --target x86_64-pc-windows-msvc
+          cargo build --release --target ${{ inputs.target }}
         else
-          cargo build --release --target x86_64-pc-windows-msvc --features "${{ inputs.features }}"
+          cargo build --release --target ${{ inputs.target }} --features "${{ inputs.features }}"
         fi
 
     - name: Prepare Artifact 📦
       shell: bash
       run: |
         mkdir -p output
-        cp target/x86_64-pc-windows-msvc/release/${{ inputs.binary_name }}.exe output/${{ inputs.binary_name }}-windows-x86_64.exe
+        cp target/${{ inputs.target }}/release/${{ inputs.binary_name }}.exe output/${{ inputs.binary_name }}${{ inputs.suffix }}.exe

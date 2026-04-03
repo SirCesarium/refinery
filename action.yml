@@ -24,6 +24,18 @@ inputs:
     description: "Enable build for ARMv7"
     required: false
     default: "false"
+  windows_32bit:
+    description: "Enable build for Windows x86"
+    required: false
+    default: "false"
+  windows_arm64:
+    description: "Enable build for Windows ARM64"
+    required: false
+    default: "false"
+  macos_x86:
+    description: "Enable build for macOS Intel"
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
@@ -36,13 +48,16 @@ runs:
         linux_32bit: ${{ inputs.linux_32bit }}
         linux_arm64: ${{ inputs.linux_arm64 }}
         linux_armv7: ${{ inputs.linux_armv7 }}
+        windows_32bit: ${{ inputs.windows_32bit }}
+        windows_arm64: ${{ inputs.windows_arm64 }}
+        macos_x86: ${{ inputs.macos_x86 }}
 
     - name: Auto-Release 🏷️
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github_token }}
       run: |
-        if ! err_msg=$(gh release create ${{ github.ref_name }} --target ${{ github.sha }} --notes "Release ${{ github.ref_name }}" 2>&1); then
+        if ! err_msg=$(gh release create ${{ github.ref_name }} --target ${{ github.sha }} --notes 'Release ${{ github.ref_name }}' 2>&1); then
           if [[ ! "$err_msg" == *"already exists"* ]]; then
             echo "::error::Release creation failed: $err_msg"
             exit 1

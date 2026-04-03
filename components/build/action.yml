@@ -21,6 +21,18 @@ inputs:
     description: "Enable build for ARMv7"
     required: false
     default: "false"
+  windows_32bit:
+    description: "Enable build for Windows x86"
+    required: false
+    default: "false"
+  windows_arm64:
+    description: "Enable build for Windows ARM64"
+    required: false
+    default: "false"
+  macos_x86:
+    description: "Enable build for macOS Intel"
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
@@ -72,19 +84,50 @@ runs:
     # ---------------------------------------------------------
     # WINDOWS
     # ---------------------------------------------------------
-    - name: Build Windows
+    - name: Build Windows x64
       if: runner.os == 'Windows'
       uses: sircesarium/refinery-rs/components/build/windows@main
       with:
         binary_name: ${{ inputs.binary_name }}
         features: ${{ inputs.features }}
+        target: "x86_64-pc-windows-msvc"
+        suffix: "-windows"
+
+    - name: Build Windows x86
+      if: runner.os == 'Windows' && inputs.windows_32bit == 'true'
+      uses: sircesarium/refinery-rs/components/build/windows@main
+      with:
+        binary_name: ${{ inputs.binary_name }}
+        features: ${{ inputs.features }}
+        target: "i686-pc-windows-msvc"
+        suffix: "-windows-i686"
+
+    - name: Build Windows ARM64
+      if: runner.os == 'Windows' && inputs.windows_arm64 == 'true'
+      uses: sircesarium/refinery-rs/components/build/windows@main
+      with:
+        binary_name: ${{ inputs.binary_name }}
+        features: ${{ inputs.features }}
+        target: "aarch64-pc-windows-msvc"
+        suffix: "-windows-arm64"
 
     # ---------------------------------------------------------
     # MACOS SUITE
     # ---------------------------------------------------------
-    - name: Build macOS
+    - name: Build macOS Silicon
       if: runner.os == 'macOS'
       uses: sircesarium/refinery-rs/components/build/mac@main
       with:
         binary_name: ${{ inputs.binary_name }}
         features: ${{ inputs.features }}
+        target: "aarch64-apple-darwin"
+        suffix: "-macos"
+
+    - name: Build macOS Intel
+      if: runner.os == 'macOS' && inputs.macos_x86 == 'true'
+      uses: sircesarium/refinery-rs/components/build/mac@main
+      with:
+        binary_name: ${{ inputs.binary_name }}
+        features: ${{ inputs.features }}
+        target: "x86_64-apple-darwin"
+        suffix: "-macos-x86_64"
