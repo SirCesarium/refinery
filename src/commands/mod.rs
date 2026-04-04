@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use miette::Result;
 
+pub mod core;
 pub mod init;
 pub mod release;
 
@@ -17,6 +18,7 @@ pub struct Cli {
 pub enum Commands {
     Init,
     Release(release::ReleaseArgs),
+    Core(core::CoreArgs),
 }
 
 /// Orchestrates CLI execution.
@@ -26,6 +28,7 @@ pub async fn execute() -> Result<()> {
     match cli.command {
         Commands::Init => Actions::init().await?,
         Commands::Release(args) => Actions::release(args).await?,
+        Commands::Core(args) => Actions::core(args).await?,
     }
 
     Ok(())
