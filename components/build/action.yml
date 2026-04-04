@@ -61,7 +61,7 @@ runs:
 
     - name: Linux Standard (x86_64)
       if: runner.os == 'Linux'
-      uses: sircesarium/refinery-rs/components/build/linux@main
+      uses: ./refinery/components/build/linux
       with:
         binary_name: ${{ inputs.binary_name }}
         features: ${{ inputs.features }}
@@ -70,7 +70,7 @@ runs:
 
     - name: Linux Legacy (i686)
       if: runner.os == 'Linux' && inputs.linux_32bit == 'true'
-      uses: sircesarium/refinery-rs/components/build/linux@main
+      uses: ./refinery/components/build/linux
       with:
         binary_name: ${{ inputs.binary_name }}
         features: ${{ inputs.features }}
@@ -79,7 +79,7 @@ runs:
 
     - name: Linux ARM64
       if: runner.os == 'Linux' && inputs.linux_arm64 == 'true'
-      uses: sircesarium/refinery-rs/components/build/linux@main
+      uses: ./refinery/components/build/linux
       with:
         binary_name: ${{ inputs.binary_name }}
         features: ${{ inputs.features }}
@@ -88,7 +88,7 @@ runs:
 
     - name: Linux ARMv7
       if: runner.os == 'Linux' && inputs.linux_armv7 == 'true'
-      uses: sircesarium/refinery-rs/components/build/linux@main
+      uses: ./refinery/components/build/linux
       with:
         binary_name: ${{ inputs.binary_name }}
         features: ${{ inputs.features }}
@@ -97,7 +97,7 @@ runs:
 
     - name: Linux Packaging (.deb, .rpm) 📦
       if: runner.os == 'Linux' && inputs.linux_packaging == 'true'
-      uses: sircesarium/refinery-rs/components/packaging/linux@main
+      uses: ./refinery/components/packaging/linux
       with:
         binary_name: ${{ inputs.binary_name }}
         output_dir: "output"
@@ -107,7 +107,7 @@ runs:
     # ---------------------------------------------------------
     - name: Build Windows x64
       if: runner.os == 'Windows'
-      uses: sircesarium/refinery-rs/components/build/windows@main
+      uses: ./refinery/components/build/windows
       with:
         binary_name: ${{ inputs.binary_name }}
         features: ${{ inputs.features }}
@@ -116,7 +116,7 @@ runs:
 
     - name: Build Windows x86
       if: runner.os == 'Windows' && inputs.windows_32bit == 'true'
-      uses: sircesarium/refinery-rs/components/build/windows@main
+      uses: ./refinery/components/build/windows
       with:
         binary_name: ${{ inputs.binary_name }}
         features: ${{ inputs.features }}
@@ -125,7 +125,7 @@ runs:
 
     - name: Build Windows ARM64
       if: runner.os == 'Windows' && inputs.windows_arm64 == 'true'
-      uses: sircesarium/refinery-rs/components/build/windows@main
+      uses: ./refinery/components/build/windows
       with:
         binary_name: ${{ inputs.binary_name }}
         features: ${{ inputs.features }}
@@ -134,7 +134,7 @@ runs:
 
     - name: Windows Packaging (.msi) 📦
       if: runner.os == 'Windows' && inputs.windows_packaging == 'true'
-      uses: sircesarium/refinery-rs/components/packaging/windows@main
+      uses: ./refinery/components/packaging/windows
       with:
         binary_name: ${{ inputs.binary_name }}
         output_dir: "output"
@@ -144,7 +144,7 @@ runs:
     # ---------------------------------------------------------
     - name: Build macOS Silicon
       if: runner.os == 'macOS'
-      uses: sircesarium/refinery-rs/components/build/mac@main
+      uses: ./refinery/components/build/mac
       with:
         binary_name: ${{ inputs.binary_name }}
         features: ${{ inputs.features }}
@@ -153,7 +153,7 @@ runs:
 
     - name: Build macOS Intel
       if: runner.os == 'macOS' && inputs.macos_x86 == 'true'
-      uses: sircesarium/refinery-rs/components/build/mac@main
+      uses: ./refinery/components/build/mac
       with:
         binary_name: ${{ inputs.binary_name }}
         features: ${{ inputs.features }}

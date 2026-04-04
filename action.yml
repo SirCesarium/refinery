@@ -56,13 +56,24 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Get Refinery Version
+      shell: bash
+      run: echo "REFINERY_VERSION=${{ github.action_ref || 'main' }}" >> $GITHUB_ENV
+
+    - name: Checkout Refinery
+      uses: actions/checkout@v6
+      with:
+        repository: sircesarium/refinery-rs
+        path: ./refinery
+        ref: ${{ env.REFINERY_VERSION }}
+
     - name: Prepare Workspace 🧹
       shell: bash
       run: mkdir -p output
 
     - name: Build Orchestration 🏗️
       if: inputs.mode == 'bin'
-      uses: sircesarium/refinery-rs/components/build@main
+      uses: ./refinery/components/build
       with:
         binary_name: ${{ inputs.binary_name }}
         features: ${{ inputs.features }}
@@ -77,7 +88,7 @@ runs:
 
     - name: Library Orchestration 📚
       if: inputs.mode == 'lib'
-      uses: sircesarium/refinery-rs/components/library@main
+      uses: ./refinery/components/library
       with:
         binary_name: ${{ inputs.binary_name }}
         output_dir: "output"
