@@ -8,7 +8,6 @@
     clippy::absolute_paths
 )]
 
-mod errors;
 mod ui;
 
 use crate::ui::{

@@ -2,7 +2,7 @@
 // @swt-disable max-lines max-repetition
 #![allow(dead_code)]
 
-use crate::errors::Result;
+use refinery_rs::errors::Result;
 use std::fmt::Display;
 
 #[cfg(feature = "pretty-cli")]
