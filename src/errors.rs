@@ -8,7 +8,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum RefineryError {
     #[error("{0}")]
-    Generic(String),
+    Generic(#[from] anyhow::Error),
 
     #[error("{0}")]
     Config(String),
