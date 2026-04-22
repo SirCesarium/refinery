@@ -1,0 +1,57 @@
+[[binaries]]
+name = "refinery"
+path = "src/main.rs"
+
+[[binaries]]
+name = "refinery-build"
+path = "src/main.rs"
+no_default_features = true
+
+[targets.linux.gnu]
+archs = [
+    "x86_64",
+    "aarch64",
+]
+artifacts = [
+    "refinery",
+    "refinery-build",
+]
+pkg = [
+    "deb",
+    "rpm",
+]
+strip = true
+
+[targets.linux.musl]
+archs = [
+    "x86_64",
+    "aarch64",
+]
+artifacts = [
+    "refinery",
+    "refinery-build",
+]
+pkg = [
+    "deb",
+    "rpm",
+]
+strip = true
+
+[targets.windows]
+archs = [
+    "x86_64",
+    "aarch64",
+]
+artifacts = ["refinery"]
+pkg = ["msi"]
+ext = ".exe"
+strip = true
+
+[targets.macos]
+archs = ["aarch64"]
+artifacts = ["refinery"]
+pkg = [
+    "dmg",
+    "pkg",
+]
+strip = true

@@ -2,6 +2,19 @@
 name = "refinery-rs"
 version = "0.1.0"
 edition = "2024"
+authors = ["SirCesarium <contact.cesarmarcano@gmail.com>"]
+license = "MIT"
+description = "Refining Rust into universal artifacts."
+repository = "https://github.com/SirCesarium/refinery-rs"
+
+[package.metadata]
+
+[package.metadata.deb]
+name = "refinery-rs"
+
+[package.metadata.generate-rpm]
+name = "refinery-rs"
+assets = [{ source = "target/release/refinery-rs", dest = "/usr/bin/refinery-rs", mode = "755" }]
 
 [dependencies]
 # Core

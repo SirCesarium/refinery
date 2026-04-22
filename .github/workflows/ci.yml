@@ -1,19 +1,24 @@
-name: CI Validation
-
+name: Quality Gate
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, master ]
-
+    branches: [ main ]
 jobs:
-  validate:
+  check:
+    name: Quality & Testing
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.2
-      - name: Refinery CI
-        uses: sircesarium/refinery-rs/ci@v2.0
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          enable-sweet: true
-          enable-clippy: false
-          enable-fmt: true
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Sweet Analysis
+        run: curl -L https://github.com/SirCesarium/sweet/releases/download/v5.0.0-rc.4/swt_x86_64-unknown-linux-musl -o swt && chmod +x swt && ./swt
+      - name: Check Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+      - name: Run Tests
+        run: cargo test
