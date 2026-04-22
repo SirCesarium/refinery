@@ -171,7 +171,7 @@ fn setup_lib(config: &mut RefineryConfig) -> Result<()> {
             if let Some(parent) = lib_path.parent() {
                 fs::create_dir_all(parent)?;
             }
-            let boilerplate = r#"#[no_mangle]
+            let boilerplate = r#"#[unsafe(no_mangle)]
 pub extern "C" fn hello_refinery() {
     println!("Hello from Refinery-optimized library!");
 }
