@@ -23,24 +23,9 @@ pub fn edit_libraries(config: &mut RefineryConfig) -> Result<bool> {
         }
 
         if choice.contains("Add New Library") {
-            let name = prompt!("Name:", "The name of your library artifact")?;
-            if name.trim().is_empty() {
-                continue;
+            if add_library_flow(config)? {
+                changed = true;
             }
-            let path_input = prompt!("Path (default: src/lib.rs):", "Source file location")?;
-            let path = if path_input.trim().is_empty() {
-                "src/lib.rs".to_string()
-            } else {
-                path_input.trim().to_string()
-            };
-
-            config.libraries.push(Library {
-                name: name.trim().to_string(),
-                path,
-                types: vec![LibType::Static],
-                ..Default::default()
-            });
-            changed = true;
         } else {
             let idx = config
                 .libraries
@@ -54,6 +39,40 @@ pub fn edit_libraries(config: &mut RefineryConfig) -> Result<bool> {
         }
     }
     Ok(changed)
+}
+
+fn add_library_flow(config: &mut RefineryConfig) -> Result<bool> {
+    let name = prompt!("Name:", "The name of your library artifact")?;
+    if name.trim().is_empty() {
+        return Ok(false);
+    }
+    let path_input = prompt!("Path (default: src/lib.rs):", "Source file location")?;
+    let path = if path_input.trim().is_empty() {
+        "src/lib.rs".to_string()
+    } else {
+        path_input.trim().to_string()
+    };
+
+    let types = MultiSelect::new("Library types:", vec![LibType::Static, LibType::Dynamic])
+        .with_render_config(get_render_config())
+        .prompt()?;
+
+    let headers = prompt_confirm("Generate C headers?", false)?;
+
+    if types.is_empty() && !headers {
+        println!();
+        warn("No library types or headers selected. Artifact discarded.");
+        return Ok(false);
+    }
+
+    config.libraries.push(Library {
+        name: name.trim().to_string(),
+        path,
+        types,
+        headers,
+        ..Default::default()
+    });
+    Ok(true)
 }
 
 /// # Errors
@@ -83,6 +102,11 @@ pub fn edit_library_fields(libs: &mut Vec<Library>, idx: usize) -> Result<bool> 
         .prompt()?;
 
         if field == done_label {
+            let lib_final = &libs[idx];
+            if lib_final.types.is_empty() && !lib_final.headers {
+                warn("Library has no types or headers. Removing artifact.");
+                libs.remove(idx);
+            }
             return Ok(true);
         }
         if field == remove_label {
@@ -96,30 +120,36 @@ pub fn edit_library_fields(libs: &mut Vec<Library>, idx: usize) -> Result<bool> 
         let lib_mut = libs
             .get_mut(idx)
             .ok_or_else(|| anyhow!("Failed to get mutable library"))?;
-        if field.starts_with("Name:") {
-            let new = prompt!("New name:", &format!("Current: {}", lib_mut.name))?;
-            if !new.trim().is_empty() {
-                lib_mut.name = new.trim().to_string();
+        match field.as_str() {
+            _ if field.starts_with("Name:") => {
+                let new = prompt!("New name:", &format!("Current: {}", lib_mut.name))?;
+                if !new.trim().is_empty() {
+                    lib_mut.name = new.trim().to_string();
+                }
             }
-        } else if field.starts_with("Path:") {
-            let new = prompt!("New path:", &format!("Current: {}", lib_mut.path))?;
-            if !new.trim().is_empty() {
-                lib_mut.path = new.trim().to_string();
+            _ if field.starts_with("Path:") => {
+                let new = prompt!("New path:", &format!("Current: {}", lib_mut.path))?;
+                if !new.trim().is_empty() {
+                    lib_mut.path = new.trim().to_string();
+                }
             }
-        } else if field.starts_with("Types:") {
-            let options = vec![LibType::Static, LibType::Dynamic];
-            let defaults: Vec<usize> = options
-                .iter()
-                .enumerate()
-                .filter(|(_, t)| lib_mut.types.contains(t))
-                .map(|(i, _)| i)
-                .collect();
-            lib_mut.types = MultiSelect::new("Types:", options)
-                .with_default(&defaults)
-                .with_render_config(get_render_config())
-                .prompt()?;
-        } else if field.starts_with("Headers:") {
-            lib_mut.headers = !lib_mut.headers;
+            _ if field.starts_with("Types:") => {
+                let options = vec![LibType::Static, LibType::Dynamic];
+                let defaults: Vec<usize> = options
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, t)| lib_mut.types.contains(t))
+                    .map(|(i, _)| i)
+                    .collect();
+                lib_mut.types = MultiSelect::new("Types:", options)
+                    .with_default(&defaults)
+                    .with_render_config(get_render_config())
+                    .prompt()?;
+            }
+            _ if field.starts_with("Headers:") => {
+                lib_mut.headers = !lib_mut.headers;
+            }
+            _ => {}
         }
     }
 }
@@ -165,13 +195,18 @@ pub fn configure_libraries(config: &mut RefineryConfig, default_name: &str) -> R
 
         let headers = prompt_confirm("Generate C headers?", false)?;
 
-        config.libraries.push(Library {
-            name,
-            path,
-            out_name: None,
-            types,
-            headers,
-        });
+        if types.is_empty() && !headers {
+            println!();
+            warn("No library types or headers selected. Skipping library entry.");
+        } else {
+            config.libraries.push(Library {
+                name,
+                path,
+                out_name: None,
+                types,
+                headers,
+            });
+        }
 
         println!();
         if !prompt_confirm("Add another library?", false)? {

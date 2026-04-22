@@ -56,6 +56,12 @@ impl RefineryConfig {
                     lib.name
                 )));
             }
+            if lib.types.is_empty() && !lib.headers {
+                return Err(RefineryError::Config(format!(
+                    "Library '{}' must have at least one type (static/dynamic) or generate headers",
+                    lib.name
+                )));
+            }
         }
 
         if let Some(ref l) = self.targets.linux {
