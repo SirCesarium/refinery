@@ -13,12 +13,36 @@ macro_rules! spinner {
                 .unwrap_or_else(|_| ProgressStyle::default_spinner());
             let style = if cfg!(feature = "nerd-fonts") {
                 style.tick_strings(&[
-                    &"󰈸  ".color($crate::ui::BRAND_ORANGE_XTERM).to_string(),
-                    &"󰈸󰈸 ".color($crate::ui::BRAND_ORANGE_XTERM).to_string(),
-                    &"󰈸󰈸󰈸".color($crate::ui::BRAND_ORANGE_XTERM).to_string(),
-                    &"󰈸󰈸󰈸".color($crate::ui::BRAND_ORANGE_XTERM).to_string(),
-                    &" 󰈸󰈸".color($crate::ui::BRAND_ORANGE_XTERM).to_string(),
-                    &"  󰈸".color($crate::ui::BRAND_ORANGE_XTERM).to_string(),
+                    &format!(
+                        "{}  ",
+                        $crate::ui::icons::FIRE.color($crate::ui::BRAND_ORANGE_XTERM)
+                    ),
+                    &format!(
+                        "{}{} ",
+                        $crate::ui::icons::FIRE.color($crate::ui::BRAND_ORANGE_XTERM),
+                        $crate::ui::icons::FIRE.color($crate::ui::BRAND_ORANGE_XTERM)
+                    ),
+                    &format!(
+                        "{}{}{}",
+                        $crate::ui::icons::FIRE.color($crate::ui::BRAND_ORANGE_XTERM),
+                        $crate::ui::icons::FIRE.color($crate::ui::BRAND_ORANGE_XTERM),
+                        $crate::ui::icons::FIRE.color($crate::ui::BRAND_ORANGE_XTERM)
+                    ),
+                    &format!(
+                        "{}{}{}",
+                        $crate::ui::icons::FIRE.color($crate::ui::BRAND_ORANGE_XTERM),
+                        $crate::ui::icons::FIRE.color($crate::ui::BRAND_ORANGE_XTERM),
+                        $crate::ui::icons::FIRE.color($crate::ui::BRAND_ORANGE_XTERM)
+                    ),
+                    &format!(
+                        " {}{} ",
+                        $crate::ui::icons::FIRE.color($crate::ui::BRAND_ORANGE_XTERM),
+                        $crate::ui::icons::FIRE.color($crate::ui::BRAND_ORANGE_XTERM)
+                    ),
+                    &format!(
+                        "  {} ",
+                        $crate::ui::icons::FIRE.color($crate::ui::BRAND_ORANGE_XTERM)
+                    ),
                 ])
             } else {
                 style.tick_chars("|/-\\")
@@ -45,17 +69,10 @@ macro_rules! progress {
             use indicatif::{ProgressBar, ProgressStyle};
             use owo_colors::OwoColorize;
             let pb = ProgressBar::new($len);
-            let template = if cfg!(feature = "nerd-fonts") {
-                format!(
-                    "{} {{msg}} \x1b[38;5;208m{{bar:30}}\x1b[0m {{percent}}% \x1b[2m({{pos}}/{{len}})\x1b[0m",
-                    "󰒓".color($crate::ui::BRAND_ORANGE_XTERM)
-                )
-            } else {
-                format!(
-                    "{} {{msg}} \x1b[38;5;208m{{bar:30}}\x1b[0m {{percent}}%",
-                    "*".color($crate::ui::BRAND_ORANGE_XTERM)
-                )
-            };
+            let template = format!(
+                "{} {{msg}} \x1b[38;5;208m{{bar:30}}\x1b[0m {{percent}}% \x1b[2m({{pos}}/{{len}})\x1b[0m",
+                $crate::ui::icons::SETUP.color($crate::ui::BRAND_ORANGE_XTERM)
+            );
             let style = ProgressStyle::default_bar()
                 .template(&template)
                 .unwrap_or_else(|_| ProgressStyle::default_bar())
@@ -74,16 +91,15 @@ macro_rules! progress {
 
 #[macro_export]
 macro_rules! log_step {
-    ($icon_nf:expr, $icon_plain:expr, $color:ident, $($arg:tt)*) => {
+    ($icon:expr, $color:ident, $($arg:tt)*) => {
         #[cfg(feature = "pretty-cli")]
         {
             use owo_colors::OwoColorize;
-            let icon = if cfg!(feature = "nerd-fonts") { $icon_nf } else { $icon_plain };
-            println!("{} {}", icon.color($crate::ui::BRAND_ORANGE_XTERM).bold(), format!($($arg)*).white());
+            println!("{} {}", $icon.color($crate::ui::BRAND_ORANGE_XTERM).bold(), format!($($arg)*).white());
         }
         #[cfg(not(feature = "pretty-cli"))]
         {
-            println!("{} {}", $icon_plain, format!($($arg)*));
+            println!("{} {}", $icon, format!($($arg)*));
         }
     };
 }

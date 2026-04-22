@@ -1,4 +1,5 @@
 use crate::errors::Result;
+use crate::ui::icons;
 use std::fmt::Display;
 
 #[cfg(feature = "pretty-cli")]
@@ -14,36 +15,16 @@ pub fn get_render_config() -> RenderConfig<'static> {
         help_message: StyleSheet::new()
             .with_fg(InquireColor::DarkGrey)
             .with_attr(Attributes::ITALIC),
-        prompt_prefix: Styled::new(if cfg!(feature = "nerd-fonts") {
-            "󱩔"
-        } else {
-            ">"
-        })
-        .with_fg(InquireColor::Grey),
-        answered_prompt_prefix: Styled::new(if cfg!(feature = "nerd-fonts") {
-            "󰒓"
-        } else {
-            "✓"
-        })
-        .with_fg(InquireColor::DarkGrey),
+        prompt_prefix: Styled::new(icons::PROMPT).with_fg(InquireColor::Grey),
+        answered_prompt_prefix: Styled::new(icons::SETUP).with_fg(InquireColor::DarkGrey),
         highlighted_option_prefix: Styled::new(if cfg!(feature = "nerd-fonts") {
             " 󱞩 "
         } else {
             " > "
         })
         .with_fg(InquireColor::LightCyan),
-        selected_checkbox: Styled::new(if cfg!(feature = "nerd-fonts") {
-            "󰄬 "
-        } else {
-            "[x] "
-        })
-        .with_fg(InquireColor::LightGreen),
-        unselected_checkbox: Styled::new(if cfg!(feature = "nerd-fonts") {
-            "󰄱 "
-        } else {
-            "[ ] "
-        })
-        .with_fg(InquireColor::Grey),
+        selected_checkbox: Styled::new(icons::CHECKBOX_ON).with_fg(InquireColor::LightGreen),
+        unselected_checkbox: Styled::new(icons::CHECKBOX_OFF).with_fg(InquireColor::Grey),
         selected_option: Some(
             StyleSheet::new()
                 .with_fg(InquireColor::LightCyan)
@@ -60,45 +41,30 @@ pub fn success(msg: &str) {
     #[cfg(feature = "pretty-cli")]
     {
         use owo_colors::OwoColorize;
-        let icon = if cfg!(feature = "nerd-fonts") {
-            "󰄬"
-        } else {
-            "✓"
-        };
-        println!("{} {}", icon.green().bold(), msg.dimmed());
+        println!("{} {}", icons::TICK.green().bold(), msg.dimmed());
     }
     #[cfg(not(feature = "pretty-cli"))]
-    println!("✓ {msg}");
+    println!("{} {msg}", icons::TICK);
 }
 
 pub fn info(msg: &str) {
     #[cfg(feature = "pretty-cli")]
     {
         use owo_colors::OwoColorize;
-        let icon = if cfg!(feature = "nerd-fonts") {
-            "󰋼"
-        } else {
-            "i"
-        };
-        println!("{} {}", icon.cyan().bold(), msg.dimmed());
+        println!("{} {}", icons::INFO.cyan().bold(), msg.dimmed());
     }
     #[cfg(not(feature = "pretty-cli"))]
-    println!("i {msg}");
+    println!("{} {msg}", icons::INFO);
 }
 
 pub fn warn(msg: &str) {
     #[cfg(feature = "pretty-cli")]
     {
         use owo_colors::OwoColorize;
-        let icon = if cfg!(feature = "nerd-fonts") {
-            "󰀪"
-        } else {
-            "!"
-        };
-        println!("{} {}", icon.color(BRAND_ORANGE_XTERM).bold(), msg);
+        println!("{} {}", icons::WARN.color(BRAND_ORANGE_XTERM).bold(), msg);
     }
     #[cfg(not(feature = "pretty-cli"))]
-    println!("! {msg}");
+    println!("{} {msg}", icons::WARN);
 }
 
 #[must_use]
@@ -138,14 +104,9 @@ pub fn error(err: &anyhow::Error) {
     #[cfg(feature = "pretty-cli")]
     {
         use owo_colors::OwoColorize;
-        let icon = if cfg!(feature = "nerd-fonts") {
-            " 󰅙"
-        } else {
-            " X"
-        };
         eprintln!(
             "\n{}{}",
-            icon.on_red(),
+            icons::CRITICAL.on_red(),
             " CRITICAL ".black().on_red().bold()
         );
         let mut current = err.source();

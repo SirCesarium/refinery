@@ -1,4 +1,5 @@
 pub mod components;
+pub mod icons;
 pub mod macros;
 #[cfg(feature = "pretty-cli")]
 pub mod prompts;

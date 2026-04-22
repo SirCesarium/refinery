@@ -3,7 +3,7 @@ use crate::core::schema::{
 };
 use crate::errors::Result;
 use crate::ui::prompts::install;
-use crate::ui::{prompt_confirm, success, warn};
+use crate::ui::{icons, prompt_confirm, success, warn};
 use crate::{log_step, prompt, spinner};
 use std::fs;
 use std::path::Path;
@@ -41,7 +41,7 @@ pub fn setup_installers(config: &RefineryConfig, force: bool) -> Result<()> {
             && install::check_and_install("cargo-generate-rpm", "generate-rpm")?;
 
         if updated {
-            log_step!("󰄬", "*", Green, "Updating Cargo.toml with metadata...");
+            log_step!(icons::TICK, Green, "Updating Cargo.toml with metadata...");
             let cargo_content = fs::read_to_string("Cargo.toml")?;
             let updated_toml = update_cargo_toml_with_metadata(&cargo_content)?;
             fs::write("Cargo.toml", updated_toml)?;

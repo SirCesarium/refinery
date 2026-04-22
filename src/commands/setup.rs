@@ -3,7 +3,7 @@ use clap::Args;
 use refinery_rs::core::schema::{LibType, RefineryConfig, prepare_cargo_lib};
 use refinery_rs::core::workflow::Workflow;
 use refinery_rs::ui::prompts::{configure_libraries, install, installers};
-use refinery_rs::ui::{prompt_confirm, success, warn};
+use refinery_rs::ui::{icons, prompt_confirm, success, warn};
 use refinery_rs::{log_step, prompt, prompt_multi};
 use std::fs;
 use std::path::Path;
@@ -40,8 +40,7 @@ pub fn run(args: &SetupArgs) -> Result<()> {
 
 fn setup_pipeline(config: &RefineryConfig) -> Result<()> {
     log_step!(
-        "󰄬",
-        "Check",
+        icons::TICK,
         Green,
         "Configuring unified refinery pipeline..."
     );
@@ -58,7 +57,7 @@ fn setup_pipeline(config: &RefineryConfig) -> Result<()> {
 }
 
 fn setup_quality_gate() -> Result<()> {
-    println!("\n󰒓 CI Quality Gate Setup");
+    println!("\n{} CI Quality Gate Setup", icons::SETUP);
     println!("  - Sweet: Maintainability analysis (nesting, length, duplication)");
     println!("  - Format: Ensures code follows rustfmt standards");
     println!("  - Clippy: Lints for common mistakes and idiomatic improvements");
@@ -146,7 +145,7 @@ fn setup_lib(config: &mut RefineryConfig) -> Result<()> {
     }
 
     for lib in &config.libraries {
-        log_step!("󰒓", "Lib", Yellow, "Configuring library: {}...", lib.name);
+        log_step!(icons::LIB, Yellow, "Configuring library: {}...", lib.name);
 
         let cargo_content = fs::read_to_string("Cargo.toml")?;
         let crate_types: Vec<String> = lib
