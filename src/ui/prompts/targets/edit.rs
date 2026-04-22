@@ -44,13 +44,13 @@ pub fn edit_targets(config: &mut RefineryConfig) -> Result<bool> {
             configure_targets(&mut config.targets, &config.binaries, &config.libraries)?;
             changed = true;
         } else {
-            let (os, libc) = if choice.starts_with("linux-gnu") {
+            let (os, libc) = if choice.contains("gnu") {
                 (OS::Linux, Some(LibC::Gnu))
-            } else if choice.starts_with("linux-musl") {
+            } else if choice.contains("musl") {
                 (OS::Linux, Some(LibC::Musl))
-            } else if choice.starts_with("windows") {
+            } else if choice.contains("windows") {
                 (OS::Windows, None)
-            } else if choice.starts_with("macos") {
+            } else if choice.contains("macos") {
                 (OS::Macos, None)
             } else {
                 continue;
