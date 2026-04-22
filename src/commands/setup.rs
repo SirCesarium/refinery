@@ -44,8 +44,8 @@ pub async fn run(args: &SetupArgs) -> Result<()> {
 }
 
 async fn setup_ci(config: &RefineryConfig) -> Result<()> {
-    log_step!("󰄬", "Check", Green, "Configuring CI workflow...");
-    let workflow = Workflow::build_workflow(config)?;
+    log_step!("󰄬", "Check", Green, "Configuring unified CI/CD workflow...");
+    let workflow = Workflow::primary_workflow(config)?;
     let yaml = workflow.to_yaml()?;
 
     let path = Path::new(".github/workflows/refinery.yml");
@@ -53,7 +53,7 @@ async fn setup_ci(config: &RefineryConfig) -> Result<()> {
         fs::create_dir_all(parent)?;
     }
     fs::write(path, yaml)?;
-    success("CI workflow generated at .github/workflows/refinery.yml");
+    success("Unified CI/CD workflow generated at .github/workflows/refinery.yml");
 
     if prompt_confirm("Setup sweet testing framework?", true)? {
         setup_sweet().await?;

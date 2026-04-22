@@ -53,6 +53,8 @@ pub struct Job {
     pub runs_on: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub needs: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "if")]
+    pub condition: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub strategy: Option<Strategy>,
     pub steps: Vec<Step>,
@@ -97,7 +99,10 @@ impl Workflow {
             on: WorkflowEvents {
                 push: Some(PushEvent {
                     branches: Some(vec!["main".into()]),
-                    tags: None,
+                    tags: Some(vec!["v*".into()]),
+                }),
+                pull_request: Some(PullRequestEvent {
+                    branches: Some(vec!["main".into()]),
                 }),
                 ..Default::default()
             },
@@ -109,25 +114,8 @@ impl Workflow {
 
     /// # Errors
     /// Returns an error if job collection fails.
-    pub fn build_workflow(config: &RefineryConfig) -> RefineryResult<Self> {
-        let mut workflow = Self::new("Refinery Build");
-        let mut jobs = HashMap::new();
-        jobs.insert("build".into(), jobs::create_matrix_job(config)?);
-        workflow.jobs = jobs;
-        Ok(workflow)
-    }
-
-    /// # Errors
-    /// Returns an error if job collection fails.
-    pub fn release_workflow(config: &RefineryConfig) -> RefineryResult<Self> {
-        let mut workflow = Self::new("Refinery Release");
-        workflow.on = WorkflowEvents {
-            push: Some(PushEvent {
-                branches: None,
-                tags: Some(vec!["v*".into()]),
-            }),
-            ..Default::default()
-        };
+    pub fn primary_workflow(config: &RefineryConfig) -> RefineryResult<Self> {
+        let mut workflow = Self::new("Refinery Pipeline");
 
         let mut perms = HashMap::new();
         perms.insert("contents".into(), "write".into());
@@ -172,6 +160,7 @@ impl Workflow {
                 name: "Release Artifacts".into(),
                 runs_on: "ubuntu-latest".into(),
                 needs: Some(vec!["build".into()]),
+                condition: Some("startsWith(github.ref, 'refs/tags/v')".into()),
                 strategy: None,
                 steps: release_steps,
             },

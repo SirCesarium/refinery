@@ -31,6 +31,7 @@ pub fn create_matrix_job(config: &RefineryConfig) -> Result<Job> {
         name: "Build ${{ matrix.target }}".into(),
         runs_on: "${{ matrix.os }}".into(),
         needs: None,
+        condition: None,
         strategy: Some(Strategy {
             fail_fast: true,
             matrix: Matrix {

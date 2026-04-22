@@ -82,7 +82,7 @@ fn handle_save(config: &RefineryConfig, path: &Path) -> Result<bool> {
 }
 
 fn generate_workflow(config: &RefineryConfig) -> Result<()> {
-    let workflow = Workflow::build_workflow(config)?;
+    let workflow = Workflow::primary_workflow(config)?;
     let yaml = workflow.to_yaml()?;
     let workflow_path = Path::new(".github/workflows/refinery.yml");
     if let Some(parent) = workflow_path.parent() {
