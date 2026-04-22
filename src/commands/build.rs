@@ -51,12 +51,13 @@ fn generate_headers(config: &RefineryConfig) -> anyhow::Result<()> {
     for lib in &config.libraries {
         if lib.headers {
             let mut cmd = Command::new("cbindgen");
-            let _ = cmd.arg("--config").arg("cbindgen.toml");
             let _ = cmd.arg("--output").arg(format!("{}.h", lib.name));
             let _ = cmd.arg(&lib.path);
 
-            // If cbindgen.toml doesn't exist, use basic defaults
-            if !Path::new("cbindgen.toml").exists() {
+            // Only add config if it exists, otherwise use defaults to avoid cbindgen panic
+            if Path::new("cbindgen.toml").exists() {
+                let _ = cmd.arg("--config").arg("cbindgen.toml");
+            } else {
                 let _ = cmd.arg("--lang").arg("c");
             }
 
