@@ -6,7 +6,6 @@ mod internal {
     use refinery_rs::core::release::{BumpType, ReleaseManager};
     use refinery_rs::ui::{info, success};
     use std::fs;
-    use std::path::PathBuf;
     use std::process::Command;
 
     #[derive(Args, Debug)]
@@ -70,19 +69,19 @@ mod internal {
         let new_version = manager.bump_version(&bump, candidate)?;
         success(&format!("Updated Cargo.toml to {new_version}"));
 
-        let changelog_path = if args.changelog {
+        let changelog = if args.changelog {
             capture_changelog(&config)?
         } else {
             None
         };
 
-        manager.finalize_git_release(&new_version, changelog_path.as_deref())?;
+        manager.finalize_git_release(&new_version, changelog.as_deref())?;
         success(&format!("Created and pushed tag v{new_version}"));
 
         Ok(())
     }
 
-    fn capture_changelog(config: &Config) -> Result<Option<PathBuf>> {
+    fn capture_changelog(config: &Config) -> Result<Option<tempfile::TempPath>> {
         let editor = config.get_editor();
         let temp_file = tempfile::NamedTempFile::new()?;
         let temp_path = temp_file.path().to_owned();
@@ -99,7 +98,7 @@ mod internal {
             let content = fs::read_to_string(&temp_path)?;
             if !content.trim().is_empty() {
                 success("Changelog captured.");
-                return Ok(Some(temp_path));
+                return Ok(Some(temp_file.into_temp_path()));
             }
         }
         Ok(None)

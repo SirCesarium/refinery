@@ -131,15 +131,23 @@ impl<'a> ReleaseManager<'a> {
         Self::git(&["push", "origin", "--tags"])?;
 
         if let Some(path) = changelog {
-            let _ = Command::new("gh")
+            let status = Command::new("gh")
                 .arg("release")
                 .arg("create")
                 .arg(&tag)
                 .arg("--title")
                 .arg(&tag)
                 .arg("--notes-file")
-                .arg(path.to_str().unwrap_or_default())
+                .arg(path)
                 .status();
+
+            match status {
+                Ok(s) if s.success() => {}
+                _ => {
+                    let msg = "Failed to create GitHub release via 'gh'. Ensure it is installed and authenticated.";
+                    return Err(anyhow!(msg));
+                }
+            }
         }
 
         Ok(())
