@@ -108,11 +108,12 @@ fn create_prepare_step(name: &str) -> Step {
 }
 
 fn create_prepare_lib_step(name: &str) -> Step {
+    let normalized = name.replace('-', "_");
     let run = format!(
         "mkdir -p dist\n\
-         find target -name \"lib{name}.*\" -path \"*/release/*\" -exec cp {{}} dist/ \\; 2>/dev/null || true\n\
-         find target -name \"{name}.lib\" -path \"*/release/*\" -exec cp {{}} dist/ \\; 2>/dev/null || true\n\
-         find target -name \"{name}.dll\" -path \"*/release/*\" -exec cp {{}} dist/ \\; 2>/dev/null || true\n\
+         find target -name \"lib{normalized}.*\" -path \"*/release/*\" -exec cp {{}} dist/ \\; 2>/dev/null || true\n\
+         find target -name \"{normalized}.lib\" -path \"*/release/*\" -exec cp {{}} dist/ \\; 2>/dev/null || true\n\
+         find target -name \"{normalized}.dll\" -path \"*/release/*\" -exec cp {{}} dist/ \\; 2>/dev/null || true\n\
          ls -R dist/"
     );
 
