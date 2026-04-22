@@ -123,8 +123,60 @@ impl Workflow {
         workflow.permissions = Some(perms);
 
         let mut jobs = HashMap::new();
-        jobs.insert("build".into(), jobs::create_matrix_job(config)?);
 
+        // 1. Preparation Job (Headers)
+        if config.libraries.iter().any(|l| l.headers) {
+            let prep_steps = vec![
+                Step { name: Some("Checkout".into()), uses: Some(actions::CHECKOUT.into()), ..Default::default() },
+                Step { name: Some("Install Toolchain".into()), uses: Some(actions::RUST_TOOLCHAIN.into()), ..Default::default() },
+                Step { name: Some("Install Refinery".into()), run: Some("cargo install --git https://github.com/SirCesarium/refinery-rs --no-default-features".into()), shell: Some("bash".into()), ..Default::default() },
+                Step { name: Some("Install cbindgen".into()), run: Some("cargo install cbindgen".into()), shell: Some("bash".into()), ..Default::default() },
+                Step { name: Some("Generate Headers".into()), run: Some("refinery build --headers-only".into()), shell: Some("bash".into()), ..Default::default() },
+                Step {
+                    name: Some("Upload Headers".into()),
+                    uses: Some("actions/upload-artifact@v4".into()),
+                    with: Some({
+                        let mut m = HashMap::new();
+                        m.insert("name".into(), "headers".into());
+                        m.insert("path".into(), "*.h".into());
+                        m
+                    }),
+                    ..Default::default()
+                },
+            ];
+            jobs.insert(
+                "prepare".into(),
+                Job {
+                    name: "Prepare Assets".into(),
+                    runs_on: "ubuntu-latest".into(),
+                    needs: None,
+                    condition: None,
+                    strategy: None,
+                    steps: prep_steps,
+                },
+            );
+        }
+
+        // 2. Build Job
+        let mut build_job = jobs::create_matrix_job(config)?;
+        if jobs.contains_key("prepare") {
+            build_job.needs = Some(vec!["prepare".into()]);
+            // Add download step to build job
+            let download_step = Step {
+                name: Some("Download Headers".into()),
+                uses: Some("actions/download-artifact@v4".into()),
+                with: Some({
+                    let mut m = HashMap::new();
+                    m.insert("name".into(), "headers".into());
+                    m
+                }),
+                ..Default::default()
+            };
+            build_job.steps.insert(1, download_step);
+        }
+        jobs.insert("build".into(), build_job);
+
+        // 3. Release Job
         let release_steps = vec![
             Step {
                 name: Some("Checkout".into()),

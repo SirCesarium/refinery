@@ -12,6 +12,8 @@ pub struct BuildArgs {
     pub target: Option<String>,
     #[arg(long)]
     pub release: bool,
+    #[arg(long)]
+    pub headers_only: bool,
 }
 
 pub struct TargetInfo {
@@ -23,6 +25,10 @@ pub struct TargetInfo {
 
 pub fn run(args: &BuildArgs) -> anyhow::Result<()> {
     let config = RefineryConfig::load("refinery.toml")?;
+
+    if args.headers_only {
+        return generate_headers(&config);
+    }
 
     let targets = collect_targets_info(&config)?;
 
@@ -38,6 +44,29 @@ pub fn run(args: &BuildArgs) -> anyhow::Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn generate_headers(config: &RefineryConfig) -> anyhow::Result<()> {
+    for lib in &config.libraries {
+        if lib.headers {
+            let mut cmd = Command::new("cbindgen");
+            let _ = cmd.arg("--config").arg("cbindgen.toml");
+            let _ = cmd.arg("--output").arg(format!("{}.h", lib.name));
+            let _ = cmd.arg(&lib.path);
+
+            // If cbindgen.toml doesn't exist, use basic defaults
+            if !Path::new("cbindgen.toml").exists() {
+                let _ = cmd.arg("--lang").arg("c");
+            }
+
+            let status = cmd.status()?;
+            if !status.success() {
+                anyhow::bail!("Failed to generate headers for {}", lib.name);
+            }
+            println!("Headers generated: {}.h", lib.name);
+        }
+    }
     Ok(())
 }
 
@@ -182,19 +211,54 @@ fn package_target(
 }
 
 fn run_cargo_deb(info: &TargetInfo) -> Result<()> {
+    let mut cargo_toml_modified = false;
+    let original_toml = fs::read_to_string("Cargo.toml").map_err(RefineryError::Io)?;
+
+    // Bypass for musl targets missing cdylib
+    if info.triple.contains("musl") {
+        let profile = "release";
+        let mut lib_found = false;
+        if let Ok(entries) = fs::read_dir(format!("target/{}/{}", info.triple, profile)) {
+            for entry in entries.flatten() {
+                if let Some(name) = entry.file_name().to_str()
+                    && Path::new(name)
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("so"))
+                {
+                    lib_found = true;
+                    break;
+                }
+            }
+        }
+
+        if !lib_found {
+            // Temporarily rename [lib] to avoid cargo-deb error
+            let mut doc = original_toml
+                .parse::<DocumentMut>()
+                .map_err(RefineryError::Toml)?;
+            if let Some(lib) = doc.remove("lib") {
+                doc.insert("lib-disabled", lib);
+                fs::write("Cargo.toml", doc.to_string()).map_err(RefineryError::Io)?;
+                cargo_toml_modified = true;
+            }
+        }
+    }
+
     let mut cmd = Command::new("cargo");
     let _ = cmd.arg("deb");
     let _ = cmd.arg("--target").arg(&info.triple);
     let _ = cmd.arg("--no-build");
     let _ = cmd.arg("--no-strip");
 
-    // Fix for musl: avoid shared library dependency checks as binaries are static
-    if info.triple.contains("musl") {
-        let _ = cmd.arg("--no-shlibs");
+    let status = cmd.status().map_err(RefineryError::Io);
+
+    // Restore Cargo.toml immediately
+    if cargo_toml_modified {
+        let _ = fs::write("Cargo.toml", original_toml);
     }
 
-    let status = cmd.status().map_err(RefineryError::Io)?;
-    if !status.success() {
+    let s = status?;
+    if !s.success() {
         return Err(RefineryError::Generic(anyhow::anyhow!(
             "Failed to generate .deb for target: {}",
             info.triple
