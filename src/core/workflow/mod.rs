@@ -25,11 +25,11 @@ impl Workflow {
         Self {
             name: name.to_string(),
             on: WorkflowEvents {
-                push: Some(PushEvent {
-                    branches: None,
-                    tags: Some(vec!["v*".into()]),
+                push: None,
+                release: Some(ReleaseEvent {
+                    types: vec!["published".into()],
                 }),
-                workflow_dispatch: Some(serde_yaml::Value::Mapping(serde_yaml::Mapping::new())),
+                workflow_dispatch: Some(serde_yaml::Value::Null),
                 ..Default::default()
             },
             permissions: None,

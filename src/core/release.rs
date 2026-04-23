@@ -128,7 +128,7 @@ impl<'a> ReleaseManager<'a> {
         Self::git(&["commit", "-m", &format!("chore: release {version}")])?;
         Self::git(&["tag", "-a", &tag, "-m", &format!("Release {version}")])?;
         Self::git(&["push", "origin", self.main_branch])?;
-        Self::git(&["push", "origin", "--tags"])?;
+        Self::git(&["push", "origin", &tag])?;
 
         if let Some(path) = changelog {
             let status = Command::new("gh")

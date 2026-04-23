@@ -69,4 +69,4 @@ path = "src/main.rs"
 
 [[bin]]
 name = "refinery-build"
-path = "src/main.rs"
+path = "src/bin/refinery-build.rs"
