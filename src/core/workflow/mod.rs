@@ -1,10 +1,12 @@
 pub mod actions;
 pub mod jobs;
+pub mod types;
 
 use crate::core::schema::RefineryConfig;
 use crate::errors::Result as RefineryResult;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+pub use types::*;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Workflow {
@@ -14,81 +16,7 @@ pub struct Workflow {
     pub permissions: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub env: Option<HashMap<String, String>>,
-    pub jobs: HashMap<String, Job>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Default)]
-pub struct WorkflowEvents {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub push: Option<PushEvent>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "pull_request")]
-    pub pull_request: Option<PullRequestEvent>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub release: Option<ReleaseEvent>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Default)]
-pub struct PushEvent {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub branches: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tags: Option<Vec<String>>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Default)]
-pub struct PullRequestEvent {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub branches: Option<Vec<String>>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Default)]
-pub struct ReleaseEvent {
-    pub types: Vec<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Job {
-    pub name: String,
-    #[serde(rename = "runs-on")]
-    pub runs_on: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub needs: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "if")]
-    pub condition: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub strategy: Option<Strategy>,
-    pub steps: Vec<Step>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Strategy {
-    #[serde(rename = "fail-fast")]
-    pub fail_fast: bool,
-    pub matrix: Matrix,
-}
-
-#[derive(Debug, Serialize, Deserialize, Default)]
-pub struct Matrix {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub include: Option<Vec<HashMap<String, String>>>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Default)]
-pub struct Step {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub uses: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub run: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub with: Option<HashMap<String, String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub env: Option<HashMap<String, String>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "if")]
-    pub condition: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub shell: Option<String>,
+    pub jobs: WorkflowJobs,
 }
 
 impl Workflow {
@@ -105,7 +33,11 @@ impl Workflow {
             },
             permissions: None,
             env: None,
-            jobs: HashMap::new(),
+            jobs: WorkflowJobs {
+                prepare: None,
+                build: Job::default(),
+                release: Job::default(),
+            },
         }
     }
 
@@ -113,109 +45,25 @@ impl Workflow {
     /// Returns an error if job collection fails.
     pub fn primary_workflow(config: &RefineryConfig) -> RefineryResult<Self> {
         let mut workflow = Self::new("Refinery Pipeline");
+        workflow.permissions = Some(actions::default_permissions());
 
-        let mut perms = HashMap::new();
-        perms.insert("contents".into(), "write".into());
-        perms.insert("pull-requests".into(), "write".into());
-        workflow.permissions = Some(perms);
+        let prepare = if config.libraries.iter().any(|l| l.headers) {
+            Some(create_prepare_job())
+        } else {
+            None
+        };
 
-        let mut jobs = HashMap::new();
-
-        // 1. Preparation Job (Headers)
-        if config.libraries.iter().any(|l| l.headers) {
-            let prep_steps = vec![
-                Step { name: Some("Checkout".into()), uses: Some(actions::CHECKOUT.into()), ..Default::default() },
-                Step { name: Some("Install Toolchain".into()), uses: Some(actions::RUST_TOOLCHAIN.into()), ..Default::default() },
-                Step { name: Some("Install Refinery".into()), run: Some("cargo install --git https://github.com/SirCesarium/refinery-rs --no-default-features".into()), shell: Some("bash".into()), ..Default::default() },
-                Step { name: Some("Install cbindgen".into()), run: Some("cargo install cbindgen".into()), shell: Some("bash".into()), ..Default::default() },
-                Step { name: Some("Generate Headers".into()), run: Some("refinery build --headers-only".into()), shell: Some("bash".into()), ..Default::default() },
-                Step {
-                    name: Some("Upload Headers".into()),
-                    uses: Some("actions/upload-artifact@v4".into()),
-                    with: Some({
-                        let mut m = HashMap::new();
-                        m.insert("name".into(), "headers".into());
-                        m.insert("path".into(), "*.h".into());
-                        m
-                    }),
-                    ..Default::default()
-                },
-            ];
-            jobs.insert(
-                "prepare".into(),
-                Job {
-                    name: "Prepare Assets".into(),
-                    runs_on: "ubuntu-latest".into(),
-                    needs: None,
-                    condition: None,
-                    strategy: None,
-                    steps: prep_steps,
-                },
-            );
+        let mut build = jobs::create_matrix_job(config)?;
+        if prepare.is_some() {
+            build.needs = Some(vec!["prepare".into()]);
+            build.steps.insert(1, create_download_step("headers", "."));
         }
 
-        // 2. Build Job
-        let mut build_job = jobs::create_matrix_job(config)?;
-        if jobs.contains_key("prepare") {
-            build_job.needs = Some(vec!["prepare".into()]);
-            // Add download step to build job
-            let download_step = Step {
-                name: Some("Download Headers".into()),
-                uses: Some("actions/download-artifact@v4".into()),
-                with: Some({
-                    let mut m = HashMap::new();
-                    m.insert("name".into(), "headers".into());
-                    m
-                }),
-                ..Default::default()
-            };
-            build_job.steps.insert(1, download_step);
-        }
-        jobs.insert("build".into(), build_job);
-
-        // 3. Release Job
-        let release_steps = vec![
-            Step {
-                name: Some("Checkout".into()),
-                uses: Some(actions::CHECKOUT.into()),
-                ..Default::default()
-            },
-            Step {
-                name: Some("Download Artifacts".into()),
-                uses: Some("actions/download-artifact@v4".into()),
-                with: Some({
-                    let mut m = HashMap::new();
-                    m.insert("path".into(), "artifacts".into());
-                    m.insert("merge-multiple".into(), "true".into());
-                    m
-                }),
-                ..Default::default()
-            },
-            Step {
-                name: Some("Publish Release".into()),
-                uses: Some(actions::SOFTPROPS_RELEASE.into()),
-                with: Some({
-                    let mut m = HashMap::new();
-                    m.insert("files".into(), "artifacts/*".into());
-                    m
-                }),
-                ..Default::default()
-            },
-        ];
-
-        jobs.insert(
-            "release".into(),
-            Job {
-                name: "Release Artifacts".into(),
-                runs_on: "ubuntu-latest".into(),
-                needs: Some(vec!["build".into()]),
-                condition: None,
-                strategy: None,
-                steps: release_steps,
-            },
-        );
-
-        workflow.jobs = jobs;
+        workflow.jobs = WorkflowJobs {
+            prepare,
+            build,
+            release: create_release_job(),
+        };
         Ok(workflow)
     }
 
@@ -226,4 +74,101 @@ impl Workflow {
     pub fn to_yaml(&self) -> Result<String, serde_yaml::Error> {
         serde_yaml::to_string(self)
     }
+}
+
+fn create_prepare_job() -> Job {
+    Job {
+        name: "Prepare Assets".into(),
+        runs_on: "ubuntu-latest".into(),
+        steps: vec![
+            create_step("Checkout", Some(actions::CHECKOUT.into()), None, None),
+            create_step(
+                "Install Toolchain",
+                Some(actions::RUST_TOOLCHAIN.into()),
+                None,
+                None,
+            ),
+            create_run_step(
+                "Install Refinery",
+                "cargo install --git https://github.com/SirCesarium/refinery-rs --no-default-features",
+            ),
+            create_run_step("Install cbindgen", "cargo install cbindgen"),
+            create_run_step("Generate Headers", "refinery build --headers-only"),
+            create_upload_step("headers", "*.h"),
+        ],
+        ..Default::default()
+    }
+}
+
+fn create_release_job() -> Job {
+    let mut m = HashMap::new();
+    m.insert("files".into(), "artifacts/*".into());
+
+    Job {
+        name: "Release Artifacts".into(),
+        runs_on: "ubuntu-latest".into(),
+        needs: Some(vec!["build".into()]),
+        steps: vec![
+            create_step("Checkout", Some(actions::CHECKOUT.into()), None, None),
+            create_download_step("artifacts", "artifacts"),
+            create_step(
+                "Publish Release",
+                Some(actions::SOFTPROPS_RELEASE.into()),
+                Some(m),
+                None,
+            ),
+        ],
+        ..Default::default()
+    }
+}
+
+fn create_step(
+    name: &str,
+    uses: Option<String>,
+    with: Option<HashMap<String, String>>,
+    run: Option<String>,
+) -> Step {
+    Step {
+        name: Some(name.into()),
+        uses,
+        shell: if run.is_some() {
+            Some("bash".into())
+        } else {
+            None
+        },
+        run,
+        with,
+        ..Default::default()
+    }
+}
+
+fn create_run_step(name: &str, cmd: &str) -> Step {
+    create_step(name, None, None, Some(cmd.into()))
+}
+
+fn create_upload_step(name: &str, path: &str) -> Step {
+    let mut m = HashMap::new();
+    m.insert("name".into(), name.into());
+    m.insert("path".into(), path.into());
+    create_step(
+        &format!("Upload {name}"),
+        Some(actions::UPLOAD_ARTIFACT.into()),
+        Some(m),
+        None,
+    )
+}
+
+fn create_download_step(name: &str, path: &str) -> Step {
+    let mut m = HashMap::new();
+    m.insert("name".into(), name.into());
+    m.insert("path".into(), path.into());
+    if name == "artifacts" {
+        m.insert("merge-multiple".into(), "true".into());
+    }
+    create_step(
+        &format!("Download {name}"),
+        Some(actions::DOWNLOAD_ARTIFACT.into()),
+        Some(m),
+        None,
+    )
 }

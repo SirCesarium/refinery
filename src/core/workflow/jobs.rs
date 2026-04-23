@@ -128,7 +128,7 @@ fn create_prepare_lib_step(name: &str) -> Step {
 fn create_upload_step() -> Step {
     Step {
         name: Some("Upload Artifacts".into()),
-        uses: Some("actions/upload-artifact@v4".into()),
+        uses: Some(actions::UPLOAD_ARTIFACT.into()),
         with: Some({
             let mut m = HashMap::new();
             m.insert("name".into(), "artifact-${{ matrix.target }}".into());
