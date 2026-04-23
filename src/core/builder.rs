@@ -277,13 +277,21 @@ impl<'a> BuildManager<'a> {
             .unwrap_or("0.1.0")
             .to_string();
 
-        // WiX only supports Numeric versions (Major.Minor.Build.Revision)
-        // Transform 1.0.0-rc.1 to 1.0.0.1
+        // WiX requires numeric versions and Cargo metadata requires 3-part SemVer.
+        // Map 1.0.0-rc.2 -> 1.0.2 temporarily.
         let modified = if version_str.contains("-rc.") {
-            let wix_version = version_str.replace("-rc.", ".");
-            cargo_toml["package"]["version"] = toml_edit::value(wix_version);
-            fs::write("Cargo.toml", cargo_toml.to_string()).map_err(RefineryError::Io)?;
-            true
+            let parts: Vec<&str> = version_str.split('-').collect();
+            let rc_part = parts[1].replace("rc.", "");
+            let base_parts: Vec<&str> = parts[0].split('.').collect();
+
+            if base_parts.len() >= 2 {
+                let wix_version = format!("{}.{}.{}", base_parts[0], base_parts[1], rc_part);
+                cargo_toml["package"]["version"] = toml_edit::value(wix_version);
+                fs::write("Cargo.toml", cargo_toml.to_string()).map_err(RefineryError::Io)?;
+                true
+            } else {
+                false
+            }
         } else {
             false
         };
