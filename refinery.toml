@@ -22,6 +22,7 @@ strip = true
 [targets.windows]
 archs = ["x86_64", "aarch64"]
 artifacts = ["refinery"]
+pkg = ["msi"]
 ext = ".exe"
 strip = true
 
