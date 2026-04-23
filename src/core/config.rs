@@ -1,9 +1,9 @@
+use crate::core::project;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use toml_edit::de::from_str;
 use toml_edit::ser::to_string_pretty;
 
@@ -44,7 +44,6 @@ impl Config {
     pub fn load() -> Result<Self> {
         let mut config = Self::load_global().unwrap_or_default();
 
-        // Merge with local config if exists
         let local_config = Self::load_local()?;
         if let Some(branch) = local_config.main_branch {
             config.main_branch = branch;
@@ -101,14 +100,13 @@ impl Config {
             .or_else(|| env::var("VISUAL").ok())
             .or_else(|| env::var("EDITOR").ok())
             .unwrap_or_else(|| {
-                // Auto-detection logic
-                if check_cmd("nvim") {
+                if project::check_command("nvim") {
                     "nvim".to_string()
-                } else if check_cmd("vim") {
+                } else if project::check_command("vim") {
                     "vim".to_string()
-                } else if check_cmd("code") {
+                } else if project::check_command("code") {
                     "code --wait".to_string()
-                } else if check_cmd("nano") {
+                } else if project::check_command("nano") {
                     "nano".to_string()
                 } else {
                     "vi".to_string()
@@ -120,14 +118,4 @@ impl Config {
 fn global_config_path() -> Result<PathBuf> {
     let home = env::var("HOME").context("Could not find HOME directory")?;
     Ok(PathBuf::from(home).join(".config/refinery/config.toml"))
-}
-
-fn check_cmd(cmd: &str) -> bool {
-    Command::new("which")
-        .arg(cmd)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
 }

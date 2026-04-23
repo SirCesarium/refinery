@@ -97,7 +97,7 @@ impl<'a> ReleaseManager<'a> {
             } else {
                 c
             };
-            next.pre = Prerelease::new(&format!("rc{rc_num}"))?;
+            next.pre = Prerelease::new(&format!("rc.{rc_num}"))?;
         } else {
             next.pre = Prerelease::EMPTY;
         }
@@ -107,7 +107,7 @@ impl<'a> ReleaseManager<'a> {
 
     fn parse_rc_number(pre: &Prerelease) -> u64 {
         let s = pre.as_str();
-        if let Some(stripped) = s.strip_prefix("rc")
+        if let Some(stripped) = s.strip_prefix("rc.")
             && let Ok(n) = stripped.parse::<u64>()
         {
             return n + 1;

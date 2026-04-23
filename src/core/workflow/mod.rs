@@ -26,7 +26,7 @@ impl Workflow {
             name: name.to_string(),
             on: WorkflowEvents {
                 push: Some(PushEvent {
-                    branches: None,
+                    branches: Some(vec!["main".into()]),
                     tags: Some(vec!["v*".into()]),
                 }),
                 ..Default::default()
@@ -65,6 +65,56 @@ impl Workflow {
             release: create_release_job(),
         };
         Ok(workflow)
+    }
+
+    /// Generates a Quality Gate workflow.
+    #[must_use]
+    pub fn quality_gate(checks: &[String], clippy_flags: &str) -> String {
+        let mut steps = vec![
+            "      - uses: actions/checkout@v6".to_string(),
+            "      - uses: dtolnay/rust-toolchain@stable\n        with:\n          components: clippy, rustfmt".to_string(),
+            "      - uses: Swatinem/rust-cache@v2".to_string(),
+        ];
+
+        if checks.iter().any(|c| c.contains("Sweet")) {
+            steps.push(format!(
+                "      - name: Sweet Analysis\n        run: curl -L {}/releases/download/{}/{} -o swt && chmod +x swt && ./swt",
+                actions::SWEET_REPO,
+                actions::SWEET_DEFAULT_VERSION,
+                actions::SWEET_BINARY
+            ));
+        }
+
+        if checks.iter().any(|c| c.contains("Format")) {
+            steps.push("      - name: Check Format\n        run: cargo fmt --check".to_string());
+        }
+
+        if checks.iter().any(|c| c.contains("Clippy")) {
+            steps.push(format!(
+                "      - name: Clippy\n        run: cargo clippy {clippy_flags}"
+            ));
+        }
+
+        if checks.iter().any(|c| c.contains("Tests")) {
+            steps.push("      - name: Run Tests\n        run: cargo test".to_string());
+        }
+
+        format!(
+            "name: Quality Gate
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  check:
+    name: Quality & Testing
+    runs-on: ubuntu-latest
+    steps:
+{}
+",
+            steps.join("\n")
+        )
     }
 
     /// Serializes the workflow to YAML.

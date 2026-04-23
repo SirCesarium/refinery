@@ -1,12 +1,10 @@
 use anyhow::Result;
 use clap::Args;
-use refinery_rs::core::schema::{LibType, RefineryConfig, prepare_cargo_lib};
-use refinery_rs::core::workflow::{Workflow, actions};
+use refinery_rs::core::project;
+use refinery_rs::core::schema::RefineryConfig;
 use refinery_rs::ui::prompts::{configure_libraries, install, installers};
 use refinery_rs::ui::{icons, prompt_confirm, success, warn};
 use refinery_rs::{log_step, prompt, prompt_multi};
-use std::fs;
-use std::path::Path;
 
 #[derive(Args, Debug)]
 pub struct SetupArgs {
@@ -44,14 +42,7 @@ fn setup_pipeline(config: &RefineryConfig) -> Result<()> {
         Green,
         "Configuring unified refinery pipeline..."
     );
-    let workflow = Workflow::primary_workflow(config)?;
-    let yaml = workflow.to_yaml()?;
-
-    let path = Path::new(".github/workflows/refinery.yml");
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(path, yaml)?;
+    project::generate_workflow(config)?;
     success("Unified pipeline generated at .github/workflows/refinery.yml");
     Ok(())
 }
@@ -76,63 +67,18 @@ fn setup_quality_gate() -> Result<()> {
         return Ok(());
     }
 
-    let mut steps = vec![
-        "      - uses: actions/checkout@v6".to_string(),
-        "      - uses: dtolnay/rust-toolchain@stable\n        with:\n          components: clippy, rustfmt".to_string(),
-        "      - uses: Swatinem/rust-cache@v2".to_string(),
-    ];
-
-    if checks.iter().any(|c| c.contains("Sweet")) {
-        steps.push(format!(
-            "      - name: Sweet Analysis\n        run: curl -L {}/releases/download/{}/{} -o swt && chmod +x swt && ./swt",
-            actions::SWEET_REPO,
-            actions::SWEET_DEFAULT_VERSION,
-            actions::SWEET_BINARY
-        ));
-    }
-
-    if checks.iter().any(|c| c.contains("Format")) {
-        steps.push("      - name: Check Format\n        run: cargo fmt --check".to_string());
-    }
-
-    if checks.iter().any(|c| c.contains("Clippy")) {
-        let flags: String = prompt!("Clippy flags (default: -- -D warnings):")?;
-        let flags = if flags.trim().is_empty() {
-            "-- -D warnings"
+    let clippy_flags: String = if checks.iter().any(|c| c.contains("Clippy")) {
+        let f: String = prompt!("Clippy flags (default: -- -D warnings):")?;
+        if f.trim().is_empty() {
+            "-- -D warnings".to_string()
         } else {
-            flags.trim()
-        };
-        steps.push(format!(
-            "      - name: Clippy\n        run: cargo clippy {flags}"
-        ));
-    }
+            f.trim().to_string()
+        }
+    } else {
+        String::new()
+    };
 
-    if checks.iter().any(|c| c.contains("Tests")) {
-        steps.push("      - name: Run Tests\n        run: cargo test".to_string());
-    }
-
-    let yaml = format!(
-        "name: Quality Gate
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-jobs:
-  check:
-    name: Quality & Testing
-    runs-on: ubuntu-latest
-    steps:
-{}
-",
-        steps.join("\n")
-    );
-
-    let path = Path::new(".github/workflows/ci.yml");
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(path, yaml)?;
+    project::generate_quality_gate(&checks, &clippy_flags)?;
     success("Custom Quality Gate generated at .github/workflows/ci.yml");
     Ok(())
 }
@@ -149,36 +95,14 @@ fn setup_lib(config: &mut RefineryConfig) -> Result<()> {
         }
     }
 
-    for lib in &config.libraries {
+    for lib in config.libraries.clone() {
         log_step!(icons::LIB, Yellow, "Configuring library: {}...", lib.name);
 
-        let cargo_content = fs::read_to_string("Cargo.toml")?;
-        let crate_types: Vec<String> = lib
-            .types
-            .iter()
-            .map(|t| match t {
-                LibType::Dynamic => "cdylib".to_string(),
-                LibType::Static => "staticlib".to_string(),
-            })
-            .collect();
-
-        let updated_cargo = prepare_cargo_lib(&cargo_content, &lib.name, crate_types, lib.headers)?;
-        fs::write("Cargo.toml", updated_cargo)?;
+        project::sync_metadata(config)?;
         success("Cargo.toml configured for library export.");
 
-        let lib_path = Path::new(&lib.path);
-        if !lib_path.exists() {
-            if let Some(parent) = lib_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            let boilerplate = r#"#[unsafe(no_mangle)]
-pub extern "C" fn hello_refinery() {
-    println!("Hello from Refinery-optimized library!");
-}
-"#;
-            fs::write(lib_path, boilerplate)?;
-            success(&format!("Boilerplate created at {}", lib.path));
-        }
+        project::generate_lib_boilerplate(&lib)?;
+        success(&format!("Boilerplate created at {}", lib.path));
 
         if lib.headers {
             install::check_and_install("cbindgen", "cbindgen")?;
