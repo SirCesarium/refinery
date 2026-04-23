@@ -18,8 +18,11 @@ pub struct WorkflowEvents {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub release: Option<ReleaseEvent>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub workflow_dispatch: Option<serde_yaml::Value>,
+    pub workflow_dispatch: Option<WorkflowDispatch>,
 }
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct WorkflowDispatch;
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct PushEvent {

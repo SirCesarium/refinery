@@ -5,6 +5,7 @@ pub mod types;
 use crate::core::schema::RefineryConfig;
 use crate::errors::Result as RefineryResult;
 use serde::{Deserialize, Serialize};
+use serde_saphyr::ser::Error as SerError;
 use std::collections::HashMap;
 pub use types::*;
 
@@ -29,7 +30,7 @@ impl Workflow {
                 release: Some(ReleaseEvent {
                     types: vec!["published".into()],
                 }),
-                workflow_dispatch: Some(serde_yaml::Value::Null),
+                workflow_dispatch: Some(WorkflowDispatch),
                 ..Default::default()
             },
             permissions: None,
@@ -123,8 +124,8 @@ jobs:
     ///
     /// # Errors
     /// Returns an error if serialization fails.
-    pub fn to_yaml(&self) -> Result<String, serde_yaml::Error> {
-        serde_yaml::to_string(self)
+    pub fn to_yaml(&self) -> Result<String, SerError> {
+        serde_saphyr::to_string(self)
     }
 }
 

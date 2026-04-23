@@ -3,6 +3,7 @@
 use std::io::Error as StdIoError;
 use std::result::Result as StdResult;
 
+use serde_saphyr::ser::Error as SerError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -20,7 +21,7 @@ pub enum RefineryError {
     FileExists(String),
 
     #[error("Failed to process YAML configuration: {0}")]
-    Yaml(#[from] serde_yaml::Error),
+    Yaml(#[from] SerError),
 
     #[error("Failed to process TOML configuration: {0}")]
     Toml(#[from] toml_edit::TomlError),
