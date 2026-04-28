@@ -4,7 +4,7 @@ path = "src/main.rs"
 
 [[binaries]]
 name = "refinery-build"
-path = "src/main.rs"
+path = "src/bin/refinery-build.rs"
 no_default_features = true
 
 [targets.linux.gnu]
