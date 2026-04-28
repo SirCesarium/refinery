@@ -26,10 +26,11 @@ impl Workflow {
         Self {
             name: name.to_string(),
             on: WorkflowEvents {
-                push: None,
-                release: Some(ReleaseEvent {
-                    types: vec!["published".into()],
+                push: Some(PushEvent {
+                    branches: None,
+                    tags: Some(vec!["v*".into()]),
                 }),
+                release: None,
                 workflow_dispatch: Some(WorkflowDispatch),
                 ..Default::default()
             },
