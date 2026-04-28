@@ -87,7 +87,7 @@ fn setup_lib(config: &mut RefineryConfig) -> Result<()> {
     if config.libraries.is_empty() {
         warn("No libraries defined in refinery.toml.");
         if prompt_confirm("Add a library configuration now?", true)? {
-            let default_name = RefineryConfig::get_default_project_name();
+            let default_name = RefineryConfig::try_get_default_project_name()?;
             configure_libraries(config, &default_name)?;
             config.save("refinery.toml")?;
         } else {

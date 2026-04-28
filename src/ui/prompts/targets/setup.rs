@@ -1,188 +1,133 @@
-use crate::core::schema::{Arch, Binary, LibC, Library, OS, TargetMatrix, Targets};
-use crate::ui::{Result, get_render_config, prompt_confirm, prompt_opt};
+use crate::core::schema::{Abi, Arch, Binary, Library, OS, TargetMatrix, Targets};
+use crate::ui::{Result, get_render_config, prompt_confirm};
 use inquire::MultiSelect;
-use std::iter::once;
 
 /// # Errors
-/// Returns error if prompt fails.
-#[allow(clippy::too_many_lines)]
+/// Returns error if interactive prompts fail.
 pub fn configure_targets(
     targets: &mut Targets,
     binaries: &[Binary],
     libraries: &[Library],
 ) -> Result<()> {
-    println!();
-    let available_os = [OS::Linux, OS::Windows, OS::Macos];
+    let os_options = OS::all().to_vec();
+    let selected_oss = MultiSelect::new("Select Target OS:", os_options)
+        .with_render_config(get_render_config())
+        .prompt()?;
 
-    loop {
-        let options: Vec<String> = available_os
-            .iter()
-            .map(ToString::to_string)
-            .chain(once("Back".to_string()))
-            .collect();
+    let artifacts_all: Vec<String> = binaries
+        .iter()
+        .map(|b| b.name.clone())
+        .chain(libraries.iter().map(|l| l.name.clone()))
+        .collect();
 
-        let selection = prompt_opt("Select Target OS:", options)?;
-        if selection == "Back" {
-            break;
-        }
+    for os in selected_oss {
+        println!("\nConfiguring {os} Matrix:");
 
-        let os = match selection.as_str() {
-            "linux" => OS::Linux,
-            "windows" => OS::Windows,
-            "macos" => OS::Macos,
-            _ => break,
-        };
-
-        let existing_matrix = match os {
-            OS::Windows => targets.windows.as_ref(),
-            OS::Macos => targets.macos.as_ref(),
-            OS::Linux => targets
-                .linux
-                .as_ref()
-                .and_then(|l| l.gnu.as_ref().or(l.musl.as_ref())),
-        };
-
-        let libc_options = if os == OS::Linux {
-            let opts = vec![LibC::Gnu, LibC::Musl];
-            let defaults = targets.linux.as_ref().map_or_else(Vec::new, |l| {
-                let mut d = Vec::new();
-                if l.gnu.is_some() {
-                    d.push(0);
-                }
-                if l.musl.is_some() {
-                    d.push(1);
-                }
-                d
-            });
-            MultiSelect::new("Select LibC variants:", opts)
-                .with_default(&defaults)
-                .with_render_config(get_render_config())
-                .prompt()?
+        let abis = Abi::for_os(os);
+        let selected_abis = if abis.is_empty() {
+            vec![None]
         } else {
-            vec![LibC::Gnu]
-        };
-
-        let arch_opts = if os == OS::Macos {
-            vec![Arch::X86_64, Arch::Aarch64]
-        } else {
-            vec![Arch::X86_64, Arch::Aarch64, Arch::I686]
-        };
-
-        let arch_defaults: Vec<usize> = existing_matrix.map_or_else(Vec::new, |m| {
-            arch_opts
-                .iter()
-                .enumerate()
-                .filter(|(_, a)| m.archs.contains(a))
-                .map(|(i, _)| i)
-                .collect()
-        });
-
-        let archs = MultiSelect::new("Select Architectures:", arch_opts)
-            .with_default(&arch_defaults)
-            .with_render_config(get_render_config())
-            .prompt()?;
-
-        if archs.is_empty() {
-            println!("No architectures selected. Skipping target.");
-            continue;
-        }
-
-        let artifact_opts: Vec<String> = binaries
-            .iter()
-            .map(|b| b.name.clone())
-            .chain(libraries.iter().map(|l| l.name.clone()))
-            .collect();
-
-        let artifact_defaults: Vec<usize> = existing_matrix.map_or_else(
-            || (0..artifact_opts.len()).collect(),
-            |m| {
-                artifact_opts
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, name)| m.artifacts.contains(name))
-                    .map(|(i, _)| i)
-                    .collect()
-            },
-        );
-
-        let artifacts =
-            MultiSelect::new("Select artifacts to include in this target:", artifact_opts)
-                .with_default(&artifact_defaults)
+            let chosen = MultiSelect::new(&format!("Select {os} ABI variants:"), abis.to_vec())
                 .with_render_config(get_render_config())
                 .prompt()?;
-
-        if artifacts.is_empty() {
-            println!("No artifacts selected for this target. Skipping OS configuration.");
-            continue;
-        }
-
-        let has_binaries = binaries.iter().any(|b| artifacts.contains(&b.name));
-
-        let pkg = if has_binaries {
-            let pkg_opts = match os {
-                OS::Linux => vec!["deb", "rpm", "tar.gz"],
-                OS::Windows => vec!["msi", "zip"],
-                OS::Macos => vec!["dmg", "pkg", "tar.gz"],
-            };
-            let pkg_defaults: Vec<usize> = existing_matrix.map_or_else(Vec::new, |m| {
-                pkg_opts
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, p)| m.pkg.contains(&(*p).to_string()))
-                    .map(|(i, _)| i)
-                    .collect()
-            });
-
-            MultiSelect::new(&format!("Select packages for {os}:"), pkg_opts)
-                .with_default(&pkg_defaults)
-                .with_render_config(get_render_config())
-                .prompt()?
-                .into_iter()
-                .map(String::from)
-                .collect()
-        } else {
-            Vec::new()
-        };
-
-        let strip = if has_binaries {
-            let strip_default = existing_matrix.is_some_and(|m| m.strip);
-            prompt_confirm("Strip symbols from binaries?", strip_default)?
-        } else {
-            false
-        };
-
-        for libc in libc_options {
-            let matrix = TargetMatrix {
-                archs: archs.clone(),
-                artifacts: artifacts.clone(),
-                pkg: pkg.clone(),
-                ext: if os == OS::Windows {
-                    Some(".exe".into())
-                } else {
-                    None
-                },
-                strip,
-                ..Default::default()
-            };
-            match (os, libc) {
-                (OS::Linux, LibC::Gnu) => {
-                    let mut l = targets.linux.take().unwrap_or_default();
-                    l.gnu = Some(matrix);
-                    targets.linux = Some(l);
-                }
-                (OS::Linux, LibC::Musl) => {
-                    let mut l = targets.linux.take().unwrap_or_default();
-                    l.musl = Some(matrix);
-                    targets.linux = Some(l);
-                }
-                (OS::Windows, _) => targets.windows = Some(matrix),
-                (OS::Macos, _) => targets.macos = Some(matrix),
+            if chosen.is_empty() {
+                println!("Warning: No ABI selected for {os}. Skipping.");
+                continue;
             }
-        }
+            chosen.into_iter().map(Some).collect()
+        };
 
-        if !prompt_confirm("Add/Modify another OS target?", false)? {
-            break;
+        for abi in selected_abis {
+            if let Some(a) = abi {
+                println!("  - ABI: {a}");
+            }
+            let matrix = prompt_target_matrix(os, &artifacts_all)?;
+            apply_matrix(targets, os, abi, matrix);
         }
     }
+
     Ok(())
+}
+
+fn prompt_target_matrix(os: OS, artifacts_all: &[String]) -> Result<TargetMatrix> {
+    let arch_opts = Arch::for_os(os).to_vec();
+    let archs = MultiSelect::new("Select Architectures:", arch_opts)
+        .with_default(&[0]) // Default to first (usually x86_64)
+        .with_render_config(get_render_config())
+        .prompt()?;
+
+    let artifacts = MultiSelect::new("Select Artifacts to build:", artifacts_all.to_vec())
+        .with_default(&(0..artifacts_all.len()).collect::<Vec<_>>())
+        .with_render_config(get_render_config())
+        .prompt()?;
+
+    let pkg_opts = match os {
+        OS::Linux => vec!["deb", "rpm", "tar.gz"],
+        OS::Windows => vec!["msi", "zip"],
+        OS::Macos => vec!["tar.gz", "zip"],
+    };
+    let pkg = MultiSelect::new("Select Packaging Formats:", pkg_opts)
+        .with_render_config(get_render_config())
+        .prompt()?
+        .into_iter()
+        .map(String::from)
+        .collect();
+
+    let strip = if os == OS::Macos {
+        false
+    } else {
+        prompt_confirm("Strip symbols from binaries?", false)?
+    };
+
+    let ext = if os == OS::Windows {
+        let val: String = inquire::Text::new("Override windows extension:")
+            .with_default(".exe")
+            .with_render_config(get_render_config())
+            .prompt()?;
+        if val == ".exe" || val.is_empty() {
+            None
+        } else {
+            Some(val)
+        }
+    } else {
+        None
+    };
+
+    Ok(TargetMatrix {
+        archs,
+        artifacts,
+        pkg,
+        ext,
+        strip,
+        overrides: None,
+    })
+}
+
+fn apply_matrix(targets: &mut Targets, os: OS, abi: Option<Abi>, matrix: TargetMatrix) {
+    match (os, abi) {
+        (OS::Linux, Some(Abi::Gnu)) => {
+            let mut l = targets.linux.take().unwrap_or_default();
+            l.gnu = Some(matrix);
+            targets.linux = Some(l);
+        }
+        (OS::Linux, Some(Abi::Musl)) => {
+            let mut l = targets.linux.take().unwrap_or_default();
+            l.musl = Some(matrix);
+            targets.linux = Some(l);
+        }
+        (OS::Windows, Some(Abi::Msvc) | None) => {
+            let mut w = targets.windows.take().unwrap_or_default();
+            w.msvc = Some(matrix);
+            targets.windows = Some(w);
+        }
+        (OS::Windows, Some(Abi::Gnu)) => {
+            let mut w = targets.windows.take().unwrap_or_default();
+            w.gnu = Some(matrix);
+            targets.windows = Some(w);
+        }
+        (OS::Macos, _) => {
+            targets.macos = Some(matrix);
+        }
+        _ => {}
+    }
 }

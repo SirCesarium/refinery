@@ -25,6 +25,25 @@ pub struct RefineryConfig {
     pub targets: Targets,
 }
 
+/// Validates that a name is safe to use (alphanumeric, dashes, underscores).
+///
+/// # Errors
+/// Returns error if name is empty or contains invalid characters.
+pub fn validate_name(name: &str) -> Result<()> {
+    if name.is_empty() {
+        return Err(RefineryError::Config("Name cannot be empty".into()));
+    }
+    if !name
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(RefineryError::Config(format!(
+            "Invalid name: '{name}'. Only alphanumeric characters, dashes, and underscores are allowed."
+        )));
+    }
+    Ok(())
+}
+
 impl RefineryConfig {
     /// Validates the configuration for consistency and correctness.
     ///
@@ -33,6 +52,7 @@ impl RefineryConfig {
     /// - No binaries or libraries are defined.
     /// - Duplicate names are found.
     /// - Target triples are invalid.
+    /// - Artifact names are invalid.
     pub fn validate(&self) -> Result<()> {
         if self.binaries.is_empty() && self.libraries.is_empty() {
             return Err(RefineryError::Config(
@@ -42,6 +62,7 @@ impl RefineryConfig {
 
         let mut names = HashSet::new();
         for bin in &self.binaries {
+            validate_name(&bin.name)?;
             if !names.insert(&bin.name) {
                 return Err(RefineryError::Config(format!(
                     "Duplicate artifact name found: {}",
@@ -50,6 +71,7 @@ impl RefineryConfig {
             }
         }
         for lib in &self.libraries {
+            validate_name(&lib.name)?;
             if !names.insert(&lib.name) {
                 return Err(RefineryError::Config(format!(
                     "Duplicate artifact name found: {}",
@@ -66,14 +88,19 @@ impl RefineryConfig {
 
         if let Some(ref l) = self.targets.linux {
             if let Some(ref g) = l.gnu {
-                g.get_triples(OS::Linux, Some(LibC::Gnu))?;
+                g.get_triples(OS::Linux, Some(Abi::Gnu))?;
             }
             if let Some(ref m) = l.musl {
-                m.get_triples(OS::Linux, Some(LibC::Musl))?;
+                m.get_triples(OS::Linux, Some(Abi::Musl))?;
             }
         }
         if let Some(ref w) = self.targets.windows {
-            w.get_triples(OS::Windows, None)?;
+            if let Some(ref m) = w.msvc {
+                m.get_triples(OS::Windows, Some(Abi::Msvc))?;
+            }
+            if let Some(ref g) = w.gnu {
+                g.get_triples(OS::Windows, Some(Abi::Gnu))?;
+            }
         }
         if let Some(ref m) = self.targets.macos {
             m.get_triples(OS::Macos, None)?;
@@ -93,8 +120,11 @@ impl RefineryConfig {
         self.libraries.iter().any(|l| l.name == name)
     }
 
-    #[must_use]
-    pub fn get_default_project_name() -> String {
+    /// Tries to get a default project name from Cargo.toml or current directory.
+    ///
+    /// # Errors
+    /// Returns error if no name can be determined or if it is invalid.
+    pub fn try_get_default_project_name() -> Result<String> {
         let cargo_path = "Cargo.toml";
         if let Ok(content) = fs::read_to_string(cargo_path)
             && let Ok(value) = content.parse::<DocumentMut>()
@@ -103,12 +133,24 @@ impl RefineryConfig {
                 .and_then(|p| p.get("name"))
                 .and_then(|n| n.as_str())
         {
-            return name.to_string();
+            let name = name.to_string();
+            validate_name(&name)?;
+            return Ok(name);
         }
-        env::current_dir()
-            .ok()
-            .and_then(|p| p.file_name().and_then(|n| n.to_str().map(String::from)))
-            .unwrap_or_else(|| "my-project".to_string())
+
+        let name = env::current_dir()
+            .map_err(RefineryError::Io)?
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(String::from)
+            .ok_or_else(|| {
+                RefineryError::Config(
+                    "Could not determine project name from current directory".into(),
+                )
+            })?;
+
+        validate_name(&name)?;
+        Ok(name)
     }
 
     /// # Errors

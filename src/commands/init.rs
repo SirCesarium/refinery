@@ -23,7 +23,7 @@ pub fn run(args: &InitArgs) -> Result<()> {
         );
     }
 
-    let default_name = RefineryConfig::get_default_project_name();
+    let default_name = RefineryConfig::try_get_default_project_name()?;
     let mut config = RefineryConfig {
         binaries: vec![],
         libraries: vec![],

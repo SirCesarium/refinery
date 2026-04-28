@@ -1,4 +1,4 @@
-use crate::core::schema::types::{Arch, LibC, OS};
+use crate::core::schema::types::{Abi, Arch, OS};
 use crate::errors::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -8,7 +8,7 @@ pub struct Targets {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub linux: Option<LinuxTargets>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub windows: Option<TargetMatrix>,
+    pub windows: Option<WindowsTargets>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub macos: Option<TargetMatrix>,
 }
@@ -19,6 +19,14 @@ pub struct LinuxTargets {
     pub gnu: Option<TargetMatrix>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub musl: Option<TargetMatrix>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct WindowsTargets {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub msvc: Option<TargetMatrix>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gnu: Option<TargetMatrix>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -76,7 +84,10 @@ impl Targets {
                 gnu: Some(TargetMatrix::default_linux_gnu()),
                 musl: None,
             }),
-            windows: Some(TargetMatrix::default_windows()),
+            windows: Some(WindowsTargets {
+                msvc: Some(TargetMatrix::default_windows_msvc()),
+                gnu: None,
+            }),
             macos: None,
         }
     }
@@ -87,33 +98,13 @@ impl TargetMatrix {
     ///
     /// # Errors
     /// Returns `RefineryError` if configuration is invalid.
-    pub fn get_triples(&self, os: OS, libc: Option<LibC>) -> Result<Vec<String>> {
+    pub fn get_triples(&self, os: OS, abi: Option<Abi>) -> Result<Vec<String>> {
         use crate::errors::RefineryError;
         let mut triples = Vec::new();
         for arch in &self.archs {
-            let triple = match (os, libc, arch) {
-                (OS::Linux, Some(LibC::Gnu), a) => {
-                    format!("{}-unknown-linux-gnu", a.to_triple_part())
-                }
-                (OS::Linux, Some(LibC::Musl), a) => {
-                    format!("{}-unknown-linux-musl", a.to_triple_part())
-                }
-                (OS::Linux, None, _) => {
-                    return Err(RefineryError::Config(
-                        "Linux target requires libc (gnu/musl)".into(),
-                    ));
-                }
-                (OS::Windows, _, Arch::X86_64) => "x86_64-pc-windows-msvc".into(),
-                (OS::Windows, _, Arch::I686) => "i686-pc-windows-msvc".into(),
-                (OS::Windows, _, Arch::Aarch64) => "aarch64-pc-windows-msvc".into(),
-                (OS::Macos, _, Arch::X86_64) => "x86_64-apple-darwin".into(),
-                (OS::Macos, _, Arch::Aarch64) => "aarch64-apple-darwin".into(),
-                (OS::Macos, _, Arch::I686) => {
-                    return Err(RefineryError::Config(
-                        "macOS does not support x32 (i686) architecture".into(),
-                    ));
-                }
-            };
+            let triple = os
+                .try_to_triple(*arch, abi)
+                .map_err(RefineryError::Target)?;
             triples.push(triple);
         }
         Ok(triples)
@@ -170,7 +161,7 @@ impl TargetMatrix {
         }
     }
 
-    pub(crate) fn default_windows() -> Self {
+    pub(crate) fn default_windows_msvc() -> Self {
         Self {
             artifacts: vec!["my-project".into()],
             pkg: vec!["msi".into()],

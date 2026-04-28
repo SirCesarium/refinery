@@ -11,6 +11,9 @@ pub enum RefineryError {
     #[error("{0}")]
     Generic(#[from] anyhow::Error),
 
+    #[error("Target error: {0}")]
+    Target(#[from] TargetError),
+
     #[error("{0}")]
     Config(String),
 
@@ -36,3 +39,15 @@ pub enum RefineryError {
 }
 
 pub type Result<T> = StdResult<T, RefineryError>;
+
+#[derive(Debug, Error)]
+pub enum TargetError {
+    #[error("Architecture {0} is not supported on {1}")]
+    UnsupportedArch(String, String),
+    #[error("ABI {0} is not supported on {1}")]
+    UnsupportedAbi(String, String),
+    #[error("ABI is required for {0} targets")]
+    MissingAbi(String),
+    #[error("Invalid combination: {0}")]
+    InvalidCombination(String),
+}

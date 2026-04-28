@@ -40,7 +40,7 @@ pub fn run(args: &ForgeArgs) -> anyhow::Result<()> {
 fn validate_cargo_metadata(config: &RefineryConfig) -> anyhow::Result<()> {
     let cargo_content = fs::read_to_string("Cargo.toml")?;
     let cargo_toml = cargo_content.parse::<DocumentMut>()?;
-    let metadata = get_cargo_metadata(&cargo_toml);
+    let metadata = get_cargo_metadata(&cargo_toml)?;
 
     let mut needs_deb = false;
     let mut needs_rpm = false;
@@ -53,7 +53,6 @@ fn validate_cargo_metadata(config: &RefineryConfig) -> anyhow::Result<()> {
                 match pkg.as_str() {
                     "deb" => needs_deb = true,
                     "rpm" => needs_rpm = true,
-                    "msi" => needs_wix = true,
                     _ => {}
                 }
             }
@@ -61,9 +60,12 @@ fn validate_cargo_metadata(config: &RefineryConfig) -> anyhow::Result<()> {
     }
 
     if let Some(windows) = &config.targets.windows {
-        for pkg in &windows.pkg {
-            if pkg == "msi" {
-                needs_wix = true;
+        let matrices = [windows.msvc.as_ref(), windows.gnu.as_ref()];
+        for m in matrices.into_iter().flatten() {
+            for pkg in &m.pkg {
+                if pkg == "msi" {
+                    needs_wix = true;
+                }
             }
         }
     }

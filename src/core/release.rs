@@ -56,7 +56,13 @@ impl<'a> ReleaseManager<'a> {
         fs::write("Cargo.toml", doc.to_string()).context("Failed to write Cargo.toml")?;
 
         if self.auto_check_cargo {
-            let _ = Command::new("cargo").arg("check").status();
+            let status = Command::new("cargo")
+                .arg("check")
+                .status()
+                .context("Failed to execute cargo check")?;
+            if !status.success() {
+                anyhow::bail!("cargo check failed after version bump");
+            }
         }
 
         Ok(new_version)
@@ -158,6 +164,7 @@ impl<'a> ReleaseManager<'a> {
     /// # Errors
     /// Returns error if git commands fail.
     pub fn delete_tag(tag: &str) -> Result<()> {
+        // Ignore errors during local deletion as the tag might not exist locally
         let _ = Self::git(&["tag", "-d", tag]);
         Self::git(&["push", "origin", "--delete", tag])
     }

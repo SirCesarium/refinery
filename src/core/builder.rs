@@ -1,6 +1,6 @@
 // @swt-disable max-lines
 use crate::core::project;
-use crate::core::schema::{LibC, OS, RefineryConfig, TargetMatrix};
+use crate::core::schema::{Abi, OS, RefineryConfig, TargetMatrix};
 use crate::errors::{RefineryError, Result};
 use std::fs;
 use std::path::Path;
@@ -13,8 +13,8 @@ pub struct TargetInfo {
     pub triple: String,
     /// The target operating system.
     pub os: OS,
-    /// The target C library (if applicable).
-    pub libc: Option<LibC>,
+    /// The target ABI (if applicable).
+    pub abi: Option<Abi>,
     /// The packaging matrix for this target.
     pub matrix: TargetMatrix,
 }
@@ -67,13 +67,13 @@ impl<'a> BuildManager<'a> {
         for lib in &self.config.libraries {
             if lib.headers {
                 let mut cmd = Command::new("cbindgen");
-                let _ = cmd.arg("--output").arg(format!("{}.h", lib.name));
-                let _ = cmd.arg(&lib.path);
+                cmd.arg("--output").arg(format!("{}.h", lib.name));
+                cmd.arg(&lib.path);
 
                 if Path::new("cbindgen.toml").exists() {
-                    let _ = cmd.arg("--config").arg("cbindgen.toml");
+                    cmd.arg("--config").arg("cbindgen.toml");
                 } else {
-                    let _ = cmd.arg("--lang").arg("c");
+                    cmd.arg("--lang").arg("c");
                 }
 
                 let status = cmd.status()?;
@@ -93,21 +93,21 @@ impl<'a> BuildManager<'a> {
 
         if let Some(linux) = &self.config.targets.linux {
             if let Some(gnu) = &linux.gnu {
-                for triple in gnu.get_triples(OS::Linux, Some(LibC::Gnu))? {
+                for triple in gnu.get_triples(OS::Linux, Some(Abi::Gnu))? {
                     infos.push(TargetInfo {
                         triple,
                         os: OS::Linux,
-                        libc: Some(LibC::Gnu),
+                        abi: Some(Abi::Gnu),
                         matrix: gnu.clone(),
                     });
                 }
             }
             if let Some(musl) = &linux.musl {
-                for triple in musl.get_triples(OS::Linux, Some(LibC::Musl))? {
+                for triple in musl.get_triples(OS::Linux, Some(Abi::Musl))? {
                     infos.push(TargetInfo {
                         triple,
                         os: OS::Linux,
-                        libc: Some(LibC::Musl),
+                        abi: Some(Abi::Musl),
                         matrix: musl.clone(),
                     });
                 }
@@ -115,13 +115,25 @@ impl<'a> BuildManager<'a> {
         }
 
         if let Some(windows) = &self.config.targets.windows {
-            for triple in windows.get_triples(OS::Windows, None)? {
-                infos.push(TargetInfo {
-                    triple,
-                    os: OS::Windows,
-                    libc: None,
-                    matrix: windows.clone(),
-                });
+            if let Some(msvc) = &windows.msvc {
+                for triple in msvc.get_triples(OS::Windows, Some(Abi::Msvc))? {
+                    infos.push(TargetInfo {
+                        triple,
+                        os: OS::Windows,
+                        abi: Some(Abi::Msvc),
+                        matrix: msvc.clone(),
+                    });
+                }
+            }
+            if let Some(gnu) = &windows.gnu {
+                for triple in gnu.get_triples(OS::Windows, Some(Abi::Gnu))? {
+                    infos.push(TargetInfo {
+                        triple,
+                        os: OS::Windows,
+                        abi: Some(Abi::Gnu),
+                        matrix: gnu.clone(),
+                    });
+                }
             }
         }
 
@@ -130,7 +142,7 @@ impl<'a> BuildManager<'a> {
                 infos.push(TargetInfo {
                     triple,
                     os: OS::Macos,
-                    libc: None,
+                    abi: None,
                     matrix: macos.clone(),
                 });
             }
@@ -140,7 +152,7 @@ impl<'a> BuildManager<'a> {
     }
 
     fn build_target(&self, info: &TargetInfo) -> Result<()> {
-        project::setup_toolchain(&info.triple);
+        project::setup_toolchain(&info.triple)?;
 
         // Use cross for any Linux cross-compilation (not native x86_64-gnu)
         let use_cross = info.triple.contains("linux")
@@ -148,17 +160,17 @@ impl<'a> BuildManager<'a> {
 
         let mut cmd = if use_cross {
             let mut c = Command::new("cross");
-            let _ = c.arg("build");
+            c.arg("build");
             c
         } else {
             let mut c = Command::new("cargo");
-            let _ = c.arg("build");
+            c.arg("build");
             c
         };
 
-        let _ = cmd.arg("--target").arg(&info.triple);
+        cmd.arg("--target").arg(&info.triple);
         if self.release {
-            let _ = cmd.arg("--release");
+            cmd.arg("--release");
         }
 
         let status = cmd.status().map_err(RefineryError::Io)?;
@@ -254,7 +266,7 @@ impl<'a> BuildManager<'a> {
             .map_err(RefineryError::Io);
 
         if cargo_toml_modified {
-            let _ = fs::write("Cargo.toml", original_toml);
+            fs::write("Cargo.toml", original_toml).map_err(RefineryError::Io)?;
         }
         let s = status?;
         if !s.success() {
@@ -274,7 +286,7 @@ impl<'a> BuildManager<'a> {
 
         let version_str = cargo_toml["package"]["version"]
             .as_str()
-            .unwrap_or("0.1.0")
+            .ok_or_else(|| anyhow::anyhow!("Missing version in Cargo.toml"))?
             .to_string();
 
         // WiX requires numeric versions and Cargo metadata requires 3-part SemVer.
@@ -303,7 +315,7 @@ impl<'a> BuildManager<'a> {
             .status();
 
         if modified {
-            let _ = fs::write("Cargo.toml", original_toml);
+            fs::write("Cargo.toml", original_toml).map_err(RefineryError::Io)?;
         }
 
         let s = status.map_err(RefineryError::Io)?;
@@ -393,10 +405,11 @@ impl<'a> BuildManager<'a> {
                 info.triple
             )));
         }
-        let _ = fs::rename(
+        fs::rename(
             format!("target/{archive_name}"),
             format!("target/{}/{archive_name}", info.triple),
-        );
+        )
+        .map_err(RefineryError::Io)?;
         Ok(())
     }
 }

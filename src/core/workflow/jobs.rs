@@ -1,4 +1,4 @@
-use crate::core::schema::{LibC, OS, RefineryConfig, TargetMatrix};
+use crate::core::schema::{Abi, OS, RefineryConfig, TargetMatrix};
 use crate::core::workflow::{Job, Matrix, Step, Strategy, actions};
 use crate::errors::Result;
 use std::collections::HashMap;
@@ -12,15 +12,20 @@ pub fn create_matrix_job(config: &RefineryConfig) -> Result<Job> {
 
     if let Some(linux) = &config.targets.linux {
         if let Some(gnu) = &linux.gnu {
-            add_targets(&mut include, gnu, OS::Linux, Some(LibC::Gnu))?;
+            add_targets(&mut include, gnu, OS::Linux, Some(Abi::Gnu))?;
         }
         if let Some(musl) = &linux.musl {
-            add_targets(&mut include, musl, OS::Linux, Some(LibC::Musl))?;
+            add_targets(&mut include, musl, OS::Linux, Some(Abi::Musl))?;
         }
     }
 
     if let Some(windows) = &config.targets.windows {
-        add_targets(&mut include, windows, OS::Windows, None)?;
+        if let Some(msvc) = &windows.msvc {
+            add_targets(&mut include, msvc, OS::Windows, Some(Abi::Msvc))?;
+        }
+        if let Some(gnu) = &windows.gnu {
+            add_targets(&mut include, gnu, OS::Windows, Some(Abi::Gnu))?;
+        }
     }
 
     if let Some(macos) = &config.targets.macos {
@@ -46,9 +51,9 @@ fn add_targets(
     inc: &mut Vec<HashMap<String, String>>,
     matrix: &TargetMatrix,
     os: OS,
-    libc: Option<LibC>,
+    abi: Option<Abi>,
 ) -> Result<()> {
-    for triple in matrix.get_triples(os, libc)? {
+    for triple in matrix.get_triples(os, abi)? {
         let mut m = HashMap::new();
         m.insert("target".into(), triple.clone());
         m.insert(
@@ -61,7 +66,7 @@ fn add_targets(
             .into(),
         );
         let cross =
-            os == OS::Linux && (libc == Some(LibC::Musl) || triple != "x86_64-unknown-linux-gnu");
+            os == OS::Linux && (abi == Some(Abi::Musl) || triple != "x86_64-unknown-linux-gnu");
         m.insert("use_cross".into(), cross.to_string());
         inc.push(m);
     }

@@ -18,7 +18,7 @@ pub struct CargoMetadata {
 /// Returns error if TOML parsing fails or required structures cannot be created.
 pub fn update_cargo_toml_with_metadata(content: &str) -> Result<String> {
     let mut cargo_toml = content.parse::<DocumentMut>()?;
-    let metadata = get_cargo_metadata(&cargo_toml);
+    let metadata = get_cargo_metadata(&cargo_toml)?;
 
     ensure_table_exists(&mut cargo_toml, "package")?;
     let package = cargo_toml["package"]
@@ -130,7 +130,7 @@ pub fn prepare_cargo_lib(
     cbindgen: bool,
 ) -> Result<String> {
     let mut cargo_toml = content.parse::<DocumentMut>()?;
-    let metadata = get_cargo_metadata(&cargo_toml);
+    let metadata = get_cargo_metadata(&cargo_toml)?;
 
     ensure_table_exists(&mut cargo_toml, "lib")?;
     let lib = cargo_toml["lib"]
@@ -157,41 +157,41 @@ pub fn prepare_cargo_lib(
     Ok(cargo_toml.to_string())
 }
 
-#[must_use]
-pub fn get_cargo_metadata(doc: &DocumentMut) -> CargoMetadata {
-    let pkg = doc.get("package");
-    CargoMetadata {
-        name: pkg
-            .and_then(|p| p.get("name"))
-            .and_then(Item::as_str)
-            .unwrap_or("project")
-            .into(),
-        description: pkg
-            .and_then(|p| p.get("description"))
-            .and_then(Item::as_str)
-            .unwrap_or("")
-            .into(),
+/// Extracts metadata from `Cargo.toml`.
+///
+/// # Errors
+/// Returns error if required fields are missing or invalid.
+pub fn get_cargo_metadata(doc: &DocumentMut) -> Result<CargoMetadata> {
+    use crate::core::schema::validate_name;
+    let pkg = doc
+        .get("package")
+        .and_then(Item::as_table)
+        .ok_or_else(|| RefineryError::Config("Missing [package] section in Cargo.toml".into()))?;
+
+    let name = pkg
+        .get("name")
+        .and_then(Item::as_str)
+        .ok_or_else(|| RefineryError::Config("Missing package.name in Cargo.toml".into()))?;
+    validate_name(name)?;
+
+    let get_str = |key| pkg.get(key).and_then(Item::as_str).unwrap_or("").into();
+
+    Ok(CargoMetadata {
+        name: name.into(),
+        description: get_str("description"),
         authors: pkg
-            .and_then(|p| p.get("authors"))
+            .get("authors")
             .and_then(Item::as_array)
             .map(|a| {
                 a.iter()
-                    .filter_map(|v| v.as_str())
-                    .map(ToString::to_string)
+                    .filter_map(Value::as_str)
+                    .map(String::from)
                     .collect()
             })
             .unwrap_or_default(),
-        license: pkg
-            .and_then(|p| p.get("license"))
-            .and_then(Item::as_str)
-            .unwrap_or("")
-            .into(),
-        repository: pkg
-            .and_then(|p| p.get("repository"))
-            .and_then(Item::as_str)
-            .unwrap_or("")
-            .into(),
-    }
+        license: get_str("license"),
+        repository: get_str("repository"),
+    })
 }
 
 fn ensure_table_exists(doc: &mut DocumentMut, key: &str) -> Result<()> {

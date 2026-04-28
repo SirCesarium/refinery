@@ -87,16 +87,36 @@ pub extern "C" fn hello_refinery() {
 }
 
 /// Ensures the required toolchain and tools are installed.
-pub fn setup_toolchain(target: &str) {
-    let _ = Command::new("rustup")
+///
+/// # Errors
+/// Returns an error if rustup or cargo install fails.
+pub fn setup_toolchain(target: &str) -> Result<()> {
+    let status = Command::new("rustup")
         .arg("target")
         .arg("add")
         .arg(target)
-        .status();
+        .status()
+        .map_err(|e| anyhow::anyhow!("Failed to execute rustup: {e}"))?;
 
-    if target.contains("musl") && !check_command("cross") {
-        let _ = Command::new("cargo").arg("install").arg("cross").status();
+    if !status.success() {
+        return Err(anyhow::anyhow!("Failed to add target {target} via rustup").into());
     }
+
+    let needs_cross =
+        target.contains("linux") && (target.contains("musl") || !target.starts_with("x86_64"));
+
+    if needs_cross && !check_command("cross") {
+        let status = Command::new("cargo")
+            .arg("install")
+            .arg("cross")
+            .status()
+            .map_err(|e| anyhow::anyhow!("Failed to execute cargo install cross: {e}"))?;
+
+        if !status.success() {
+            return Err(anyhow::anyhow!("Failed to install cross via cargo").into());
+        }
+    }
+    Ok(())
 }
 
 /// Checks if a command is available in the system PATH.

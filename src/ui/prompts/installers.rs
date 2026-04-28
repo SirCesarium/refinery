@@ -68,7 +68,7 @@ fn run_installer_init(cmd: &str, args: &[&str], label: &str) {
 fn validate_cargo_for_installers() -> Result<()> {
     let cargo_content = fs::read_to_string("Cargo.toml")?;
     let doc = cargo_content.parse::<DocumentMut>()?;
-    let metadata = get_cargo_metadata(&doc);
+    let metadata = get_cargo_metadata(&doc)?;
 
     let mut new_authors = None;
     let mut new_license = None;
