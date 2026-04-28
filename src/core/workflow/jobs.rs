@@ -68,6 +68,9 @@ fn add_targets(
         let cross =
             os == OS::Linux && (abi == Some(Abi::Musl) || triple != "x86_64-unknown-linux-gnu");
         m.insert("use_cross".into(), cross.to_string());
+        if let Some(image) = &matrix.cross_image {
+            m.insert("cross_image".into(), image.clone());
+        }
         inc.push(m);
     }
     Ok(())
@@ -160,11 +163,7 @@ fn create_base_steps() -> Vec<Step> {
             ),
         ),
         create_cross_step(),
-        create_simple_step(
-            "Build",
-            None,
-            Some("refinery build --target ${{ matrix.target }} --release".into()),
-        ),
+        create_build_step(),
     ]
 }
 
@@ -217,6 +216,21 @@ fn create_cross_step() -> Step {
         condition: Some("${{ matrix.use_cross == 'true' }}".into()),
         run: Some("curl -L https://github.com/cross-rs/cross/releases/latest/download/cross-x86_64-unknown-linux-musl.tar.gz | tar xz -C /usr/local/bin".into()),
         shell: Some("bash".into()),
+        ..Default::default()
+    }
+}
+
+fn create_build_step() -> Step {
+    Step {
+        name: Some("Build".into()),
+        shell: Some("bash".into()),
+        run: Some(
+            r#"if [ -n "${{ matrix.cross_image }}" ]; then
+  export CROSS_IMAGE="${{ matrix.cross_image }}"
+fi
+refinery build --target ${{ matrix.target }} --release"#
+                .into(),
+        ),
         ..Default::default()
     }
 }

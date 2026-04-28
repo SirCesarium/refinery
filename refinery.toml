@@ -11,6 +11,7 @@ no_default_features = true
 archs = ["x86_64", "aarch64"]
 artifacts = ["refinery", "refinery-build"]
 pkg = ["deb", "rpm"]
+cross_image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:edge"
 strip = true
 
 [targets.linux.musl]

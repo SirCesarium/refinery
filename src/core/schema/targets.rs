@@ -39,6 +39,8 @@ pub struct TargetMatrix {
     pub pkg: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ext: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cross_image: Option<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub strip: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -52,6 +54,7 @@ impl Default for TargetMatrix {
             artifacts: vec![],
             pkg: vec![],
             ext: None,
+            cross_image: None,
             strip: false,
             overrides: None,
         }
@@ -203,6 +206,7 @@ mod tests {
     fn test_resolve_name_with_explicit_ext() {
         let matrix = TargetMatrix {
             ext: Some(".bin".to_string()),
+            cross_image: None,
             ..TargetMatrix::default()
         };
         let name = matrix.resolve_name("test", Arch::X86_64, OS::Windows, None, false);

@@ -161,6 +161,9 @@ impl<'a> BuildManager<'a> {
         let mut cmd = if use_cross {
             let mut c = Command::new("cross");
             c.arg("build");
+            if let Some(image) = &info.matrix.cross_image {
+                c.env("CROSS_IMAGE", image);
+            }
             c
         } else {
             let mut c = Command::new("cargo");
