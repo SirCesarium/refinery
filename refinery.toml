@@ -18,9 +18,10 @@ strip = true
 archs = ["x86_64", "aarch64"]
 artifacts = ["refinery", "refinery-build"]
 pkg = ["deb", "rpm"]
+tool = "zigbuild"
 strip = true
 
-[targets.windows]
+[targets.windows.msvc]
 archs = ["x86_64", "aarch64"]
 artifacts = ["refinery"]
 pkg = ["msi"]

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Targets {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub linux: Option<LinuxTargets>,
@@ -14,6 +15,7 @@ pub struct Targets {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct LinuxTargets {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gnu: Option<TargetMatrix>,
@@ -22,6 +24,7 @@ pub struct LinuxTargets {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct WindowsTargets {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub msvc: Option<TargetMatrix>,
@@ -30,6 +33,7 @@ pub struct WindowsTargets {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct TargetMatrix {
     #[serde(default = "default_archs")]
     pub archs: Vec<Arch>,
