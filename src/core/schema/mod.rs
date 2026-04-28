@@ -1,3 +1,4 @@
+// @swt-disable max-lines
 pub mod artifacts;
 pub mod metadata;
 pub mod targets;
@@ -9,15 +10,19 @@ pub use targets::*;
 pub use types::*;
 
 use crate::errors::{RefineryError, Result};
+use crate::ui;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::{env, fs, path::Path};
 use toml_edit::DocumentMut;
 use toml_edit::de;
 use toml_edit::ser::to_string_pretty;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct RefineryConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refinery_version: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub binaries: Vec<Binary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -51,6 +56,18 @@ pub fn validate_name(name: &str) -> Result<()> {
 }
 
 impl RefineryConfig {
+    fn check_version_compatibility(spec_version: &str) {
+        let current_version = env!("CARGO_PKG_VERSION");
+        let spec_major = spec_version.split('.').next().unwrap_or("0");
+        let current_major = current_version.split('.').next().unwrap_or("0");
+
+        if spec_major != current_major {
+            ui::warn(&format!(
+                "Refinery major version mismatch! Config specifies v{spec_version}, but you are using v{current_version}."
+            ));
+        }
+    }
+
     /// Validates the configuration for consistency and correctness.
     ///
     /// # Errors
@@ -60,6 +77,10 @@ impl RefineryConfig {
     /// - Target triples are invalid.
     /// - Artifact names are invalid.
     pub fn validate(&self) -> Result<()> {
+        if let Some(ref version) = self.refinery_version {
+            Self::check_version_compatibility(version);
+        }
+
         if self.binaries.is_empty() && self.libraries.is_empty() {
             return Err(RefineryError::Config(
                 "At least one binary or library must be defined".into(),
@@ -187,6 +208,7 @@ impl RefineryConfig {
 impl Default for RefineryConfig {
     fn default() -> Self {
         Self {
+            refinery_version: Some(env!("CARGO_PKG_VERSION").to_string()),
             binaries: vec![Binary::default()],
             libraries: vec![],
             targets: Targets::default_standard(),
@@ -224,6 +246,7 @@ mod tests {
     #[test]
     fn test_config_validation_empty() {
         let config = RefineryConfig {
+            refinery_version: None,
             binaries: vec![],
             libraries: vec![],
             targets: Targets::default(),

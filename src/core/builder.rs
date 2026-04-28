@@ -164,45 +164,80 @@ impl<'a> BuildManager<'a> {
             }
         });
 
-        let mut cmd = match tool {
-            "cross" => {
-                let mut c = Command::new("cross");
-                c.arg("build");
-                if let Some(image) = &info.matrix.cross_image {
-                    c.env("CROSS_IMAGE", image);
+        for artifact in &info.matrix.artifacts {
+            let mut cmd = match tool {
+                "cross" => {
+                    let mut c = Command::new("cross");
+                    c.arg("build");
+                    if let Some(image) = &info.matrix.cross_image {
+                        c.env("CROSS_IMAGE", image);
+                    }
+                    c
                 }
-                c
-            }
-            "zigbuild" => {
-                let mut c = Command::new("cargo");
-                c.arg("zigbuild");
-                c
-            }
-            _ => {
-                let mut c = Command::new("cargo");
-                c.arg("build");
-                c
-            }
-        };
+                "zigbuild" => {
+                    let mut c = Command::new("cargo");
+                    c.arg("zigbuild");
+                    c
+                }
+                _ => {
+                    let mut c = Command::new("cargo");
+                    c.arg("build");
+                    c
+                }
+            };
 
-        cmd.arg("--target").arg(&info.triple);
-        if self.release {
-            cmd.arg("--release");
-        }
+            cmd.arg("--target").arg(&info.triple);
+            cmd.arg("--bin").arg(artifact);
 
-        let status = cmd.status().map_err(RefineryError::Io)?;
-        if !status.success() {
-            return Err(RefineryError::Generic(anyhow::anyhow!(
-                "Failed to build target: {}",
-                info.triple
-            )));
+            if self.release {
+                cmd.arg("--release");
+            }
+
+            let status = cmd.status().map_err(RefineryError::Io)?;
+            if !status.success() {
+                return Err(RefineryError::Generic(anyhow::anyhow!(
+                    "Failed to build artifact {artifact} for target: {}",
+                    info.triple
+                )));
+            }
         }
 
         for pkg_format in &info.matrix.pkg {
             Self::validate_packaging_metadata(pkg_format)?;
             self.package_target(info, pkg_format)?;
+            Self::rename_linux_packages(info, pkg_format)?;
         }
 
+        Ok(())
+    }
+
+    fn rename_linux_packages(info: &TargetInfo, format: &str) -> Result<()> {
+        if info.os != OS::Linux || (format != "deb" && format != "rpm") {
+            return Ok(());
+        }
+
+        let abi_suffix = if info.triple.contains("musl") {
+            "musl"
+        } else {
+            "gnu"
+        };
+
+        if let Ok(entries) = fs::read_dir("target") {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Some(ext) = path.extension()
+                    && ext.to_str() == Some(format)
+                {
+                    let file_name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                    if !file_name.contains(abi_suffix) {
+                        let new_name = format!("{file_name}-{abi_suffix}.{format}");
+                        let mut new_path = path.clone();
+                        new_path.set_file_name(new_name);
+                        fs::rename(&path, &new_path).map_err(RefineryError::Io)?;
+                    }
+                }
+            }
+        }
         Ok(())
     }
 

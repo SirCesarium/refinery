@@ -86,14 +86,7 @@ fn create_build_steps(config: &RefineryConfig) -> Vec<Step> {
         create_toolchain_step(),
         create_simple_step("Rust Cache", Some(actions::RUST_CACHE.into()), None),
         create_packagers_step(),
-        create_simple_step(
-            "Install Refinery",
-            None,
-            Some(
-                "cargo install --git https://github.com/SirCesarium/refinery-rs --no-default-features"
-                    .into(),
-            ),
-        ),
+        create_install_refinery_step(),
         create_cross_step(),
         create_zig_step(),
         create_build_step(),
@@ -109,6 +102,25 @@ fn create_build_steps(config: &RefineryConfig) -> Vec<Step> {
 
     steps.push(create_upload_step());
     steps
+}
+
+fn create_install_refinery_step() -> Step {
+    Step {
+        name: Some("Install Refinery".into()),
+        shell: Some("bash".into()),
+        run: Some(
+            r#"VERSION="v1.0.0-rc.7" # Default fallback
+if [ -f refinery.toml ]; then
+  # Try to extract version from toml if refinery_version is present
+  EXTRACTED=$(grep refinery_version refinery.toml | cut -d'"' -f2)
+  if [ -n "$EXTRACTED" ]; then VERSION="v$EXTRACTED"; fi
+fi
+echo "Installing Refinery $VERSION..."
+curl -L "https://github.com/SirCesarium/refinery-rs/releases/download/$VERSION/refinery-x86_64-unknown-linux-musl" -o /usr/local/bin/refinery
+chmod +x /usr/local/bin/refinery"#.into()
+        ),
+        ..Default::default()
+    }
 }
 
 fn create_prepare_step(name: &str) -> Step {

@@ -25,6 +25,7 @@ pub fn run(args: &InitArgs) -> Result<()> {
 
     let default_name = RefineryConfig::try_get_default_project_name()?;
     let mut config = RefineryConfig {
+        refinery_version: Some(env!("CARGO_PKG_VERSION").to_string()),
         binaries: vec![],
         libraries: vec![],
         targets: Targets::default(),
