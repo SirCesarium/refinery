@@ -1,3 +1,4 @@
+// @swt-disable max-repetition
 use crate::core::schema::{Abi, OS, RefineryConfig, TargetMatrix};
 use crate::core::workflow::{Job, Matrix, Step, Strategy, actions};
 use crate::errors::Result;
@@ -71,13 +72,32 @@ fn add_targets(
         if let Some(image) = &matrix.cross_image {
             m.insert("cross_image".into(), image.clone());
         }
+        if let Some(tool) = &matrix.tool {
+            m.insert("tool".into(), tool.clone());
+        }
         inc.push(m);
     }
     Ok(())
 }
 
 fn create_build_steps(config: &RefineryConfig) -> Vec<Step> {
-    let mut steps = create_base_steps();
+    let mut steps = vec![
+        create_simple_step("Checkout", Some(actions::CHECKOUT.into()), None),
+        create_toolchain_step(),
+        create_simple_step("Rust Cache", Some(actions::RUST_CACHE.into()), None),
+        create_packagers_step(),
+        create_simple_step(
+            "Install Refinery",
+            None,
+            Some(
+                "cargo install --git https://github.com/SirCesarium/refinery-rs --no-default-features"
+                    .into(),
+            ),
+        ),
+        create_cross_step(),
+        create_zig_step(),
+        create_build_step(),
+    ];
 
     for bin in &config.binaries {
         steps.push(create_prepare_step(&bin.name));
@@ -148,34 +168,11 @@ fn create_upload_step() -> Step {
     }
 }
 
-fn create_base_steps() -> Vec<Step> {
-    vec![
-        create_simple_step("Checkout", Some(actions::CHECKOUT.into()), None),
-        create_toolchain_step(),
-        create_simple_step("Rust Cache", Some(actions::RUST_CACHE.into()), None),
-        create_packagers_step(),
-        create_simple_step(
-            "Install Refinery",
-            None,
-            Some(
-                "cargo install --git https://github.com/SirCesarium/refinery-rs --no-default-features"
-                    .into(),
-            ),
-        ),
-        create_cross_step(),
-        create_build_step(),
-    ]
-}
-
 fn create_simple_step(name: &str, uses: Option<String>, run: Option<String>) -> Step {
     Step {
         name: Some(name.into()),
         uses,
-        shell: if run.is_some() {
-            Some("bash".into())
-        } else {
-            None
-        },
+        shell: run.as_ref().map(|_| "bash".into()),
         run,
         ..Default::default()
     }
@@ -213,8 +210,18 @@ fi"#
 fn create_cross_step() -> Step {
     Step {
         name: Some("Install Cross".into()),
-        condition: Some("${{ matrix.use_cross == 'true' }}".into()),
+        condition: Some("${{ matrix.tool == 'cross' || (matrix.use_cross == 'true' && matrix.tool == '') }}".into()),
         run: Some("curl -L https://github.com/cross-rs/cross/releases/latest/download/cross-x86_64-unknown-linux-musl.tar.gz | tar xz -C /usr/local/bin".into()),
+        shell: Some("bash".into()),
+        ..Default::default()
+    }
+}
+
+fn create_zig_step() -> Step {
+    Step {
+        name: Some("Install Zig and cargo-zigbuild".into()),
+        condition: Some("${{ matrix.tool == 'zigbuild' }}".into()),
+        run: Some("sudo snap install zig --classic --beta && cargo install cargo-zigbuild".into()),
         shell: Some("bash".into()),
         ..Default::default()
     }

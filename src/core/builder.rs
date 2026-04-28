@@ -154,21 +154,35 @@ impl<'a> BuildManager<'a> {
     fn build_target(&self, info: &TargetInfo) -> Result<()> {
         project::setup_toolchain(&info.triple)?;
 
-        // Use cross for any Linux cross-compilation (not native x86_64-gnu)
-        let use_cross = info.triple.contains("linux")
-            && (info.triple.contains("musl") || !info.triple.starts_with("x86_64"));
-
-        let mut cmd = if use_cross {
-            let mut c = Command::new("cross");
-            c.arg("build");
-            if let Some(image) = &info.matrix.cross_image {
-                c.env("CROSS_IMAGE", image);
+        let tool = info.matrix.tool.as_deref().unwrap_or_else(|| {
+            if info.triple.contains("linux")
+                && (info.triple.contains("musl") || !info.triple.starts_with("x86_64"))
+            {
+                "cross"
+            } else {
+                "cargo"
             }
-            c
-        } else {
-            let mut c = Command::new("cargo");
-            c.arg("build");
-            c
+        });
+
+        let mut cmd = match tool {
+            "cross" => {
+                let mut c = Command::new("cross");
+                c.arg("build");
+                if let Some(image) = &info.matrix.cross_image {
+                    c.env("CROSS_IMAGE", image);
+                }
+                c
+            }
+            "zigbuild" => {
+                let mut c = Command::new("cargo");
+                c.arg("zigbuild");
+                c
+            }
+            _ => {
+                let mut c = Command::new("cargo");
+                c.arg("build");
+                c
+            }
         };
 
         cmd.arg("--target").arg(&info.triple);

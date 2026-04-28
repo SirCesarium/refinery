@@ -99,6 +99,7 @@ fn prompt_target_matrix(os: OS, artifacts_all: &[String]) -> Result<TargetMatrix
         pkg,
         ext,
         cross_image: None,
+        tool: None,
         strip,
         overrides: None,
     })
