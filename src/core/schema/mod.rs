@@ -15,14 +15,20 @@ use std::{env, fs, path::Path};
 use toml_edit::DocumentMut;
 use toml_edit::de;
 use toml_edit::ser::to_string_pretty;
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct RefineryConfig {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub binaries: Vec<Binary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub libraries: Vec<Library>,
     pub targets: Targets,
+    #[serde(default = "default_fail_fast")]
+    pub fail_fast: bool,
+}
+
+const fn default_fail_fast() -> bool {
+    true
 }
 
 /// Validates that a name is safe to use (alphanumeric, dashes, underscores).
@@ -184,6 +190,7 @@ impl Default for RefineryConfig {
             binaries: vec![Binary::default()],
             libraries: vec![],
             targets: Targets::default_standard(),
+            fail_fast: true,
         }
     }
 }
@@ -220,6 +227,7 @@ mod tests {
             binaries: vec![],
             libraries: vec![],
             targets: Targets::default(),
+            fail_fast: true,
         };
         assert!(config.validate().is_err());
     }

@@ -28,6 +28,7 @@ pub fn run(args: &InitArgs) -> Result<()> {
         binaries: vec![],
         libraries: vec![],
         targets: Targets::default(),
+        fail_fast: true,
     };
 
     loop {

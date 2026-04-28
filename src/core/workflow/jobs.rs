@@ -39,7 +39,7 @@ pub fn create_matrix_job(config: &RefineryConfig) -> Result<Job> {
         needs: None,
         condition: None,
         strategy: Some(Strategy {
-            fail_fast: true,
+            fail_fast: config.fail_fast,
             matrix: Matrix {
                 include: Some(include),
             },
