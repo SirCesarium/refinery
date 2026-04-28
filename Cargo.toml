@@ -6,6 +6,7 @@ authors = ["SirCesarium <contact.cesarmarcano@gmail.com>"]
 license = "MIT"
 description = "Refining Rust into universal artifacts."
 repository = "https://github.com/SirCesarium/refinery-rs"
+default-run = "refinery"
 
 [package.metadata]
 
