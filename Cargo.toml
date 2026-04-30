@@ -39,7 +39,7 @@ semver = { version = "1.0", optional = true }
 tempfile = "3.27"
 thiserror = "2.0"
 toml_edit = { version = "0.25", features = ["serde"] }
-serde-saphyr = "0.0.24"
+serde-saphyr = "0.0.25"
 
 [features]
 default = ["pretty-cli", "semver", "libs", "installers", "ci"]
