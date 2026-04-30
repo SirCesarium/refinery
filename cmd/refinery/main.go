@@ -1,7 +1,7 @@
 package main
 
-import "fmt"
+import "github.com/SirCesarium/refinery/internal/cli"
 
 func main() {
-	fmt.Println("Hello world.")
+	cli.Execute()
 }
