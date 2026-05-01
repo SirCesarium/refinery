@@ -200,8 +200,15 @@ func (e *RustEngine) setupEnvironment(art *config.ArtifactConfig, opts BuildOpti
 		if linker, ok := bestMatch.LangOpts["linker"].(string); ok {
 			isArmLinker := strings.Contains(linker, "aarch64") || strings.Contains(linker, "arm")
 			isArmTarget := strings.Contains(opts.Arch, "aarch64") || strings.Contains(opts.Arch, "arm")
+			isX64Linker := strings.Contains(linker, "x86_64") || strings.Contains(linker, "x64")
+			isX64Target := strings.Contains(opts.Arch, "x86_64") || strings.Contains(opts.Arch, "x64")
 
-			if isArmLinker == isArmTarget {
+			shouldApply := true
+			if (isArmLinker && !isArmTarget) || (isX64Linker && !isX64Target) {
+				shouldApply = false
+			}
+
+			if shouldApply {
 				envKey := fmt.Sprintf("CARGO_TARGET_%s_LINKER",
 					strings.ReplaceAll(strings.ReplaceAll(strings.ToUpper(target), "-", "_"), ".", "_"))
 				os.Setenv(envKey, linker)
