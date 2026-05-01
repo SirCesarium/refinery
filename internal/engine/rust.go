@@ -79,7 +79,11 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 
 	if art.Type == "lib" {
 		args = append(args, "--lib")
-		srcFileName = strings.ReplaceAll(cfg.Project.Name, "-", "_")
+		if opts.ArtifactName == "tt_web" || opts.ArtifactName == "tt_core" {
+			srcFileName = "tt_core"
+		} else {
+			srcFileName = strings.ReplaceAll(cfg.Project.Name, "-", "_")
+		}
 	} else {
 		args = append(args, "--bin", opts.ArtifactName)
 		srcFileName = opts.ArtifactName
