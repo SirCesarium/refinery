@@ -19,6 +19,41 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Download Refinery Binary
+      shell: bash
+      run: |
+        # Map runner architecture to refinery binary naming
+        R_OS="linux"
+        if [ "${{ runner.os }}" = "macOS" ]; then
+          R_OS="darwin"
+        elif [ "${{ runner.os }}" = "Windows" ]; then
+          R_OS="windows"
+        fi
+
+        R_ARCH="amd64"
+        if [ "${{ runner.arch }}" = "ARM64" ]; then
+          R_ARCH="arm64"
+        fi
+
+        BINARY_NAME="refinery-${R_OS}-${R_ARCH}"
+        if [ "$R_OS" = "windows" ]; then
+          BINARY_NAME="${BINARY_NAME}.exe"
+        fi
+
+        URL="https://github.com/SirCesarium/refinery/releases/latest/download/${BINARY_NAME}"
+        
+        echo "Downloading Refinery from $URL"
+        curl -L -o refinery_bin "$URL"
+        chmod +x refinery_bin
+        
+        # Add to path
+        mkdir -p .refinery_bin
+        mv refinery_bin .refinery_bin/refinery
+        if [ "$R_OS" = "windows" ]; then
+           mv .refinery_bin/refinery .refinery_bin/refinery.exe
+        fi
+        echo "$(pwd)/.refinery_bin" >> $GITHUB_PATH
+
     - name: Clean dist
       shell: bash
       run: rm -rf dist/ && mkdir -p dist/

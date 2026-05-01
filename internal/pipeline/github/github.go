@@ -120,11 +120,6 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 
 	buildSteps := []Step{
 		{Name: "Checkout", Uses: ActionCheckout},
-		{
-			Name: "Setup Go",
-			Uses: ActionSetupGo,
-			With: map[string]any{"go-version": "stable", "cache": true},
-		},
 	}
 
 	for _, req := range eng.GetCIRequirements(cfg) {
@@ -151,19 +146,14 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 	}
 
 	buildSteps = append(buildSteps, Step{
-		Name: "Install Refinery",
-		Run:  "go install github.com/SirCesarium/refinery/cmd/refinery@main",
-	})
-
-	buildSteps = append(buildSteps, Step{
-		Name:  "Add GOBIN to PATH",
-		Run:   "echo \"$(go env GOPATH)/bin\" >> $GITHUB_PATH",
-		Shell: "bash",
-	})
-
-	buildSteps = append(buildSteps, Step{
 		Name: "Build Artifact",
-		Run:  "refinery build --artifact ${{ matrix.artifact }} --os ${{ matrix.os }} --arch ${{ matrix.arch }} ${{ matrix.abi && format('--abi {0}', matrix.abi) }}",
+		Uses: "SirCesarium/refinery@main",
+		With: map[string]any{
+			"artifact": "${{ matrix.artifact }}",
+			"os":       "${{ matrix.os }}",
+			"arch":     "${{ matrix.arch }}",
+			"abi":      "${{ matrix.abi }}",
+		},
 	})
 
 	buildSteps = append(buildSteps, Step{
