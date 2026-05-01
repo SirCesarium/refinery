@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 
 	"github.com/SirCesarium/refinery/internal/config"
@@ -47,6 +48,7 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 		if _, err := os.Stat("/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"); err == nil {
 			os.Setenv("SDKROOT", "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk")
 		}
+
 		os.Setenv("MACOSX_DEPLOYMENT_TARGET", "11.0")
 	}
 
@@ -72,5 +74,27 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
 
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	ext := ""
+	if opts.OS == "windows" {
+		ext = "exe"
+	}
+
+	finalName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, "0.0.0", opts.ABI, ext)
+	srcBinary := opts.ArtifactName
+	if opts.OS == "windows" {
+		srcBinary += ".exe"
+	}
+
+	srcPath := filepath.Join("target", targetTriple, "release", srcBinary)
+	distPath := filepath.Join(cfg.OutputDir, finalName)
+
+	if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
+		return err
+	}
+
+	return os.Rename(srcPath, distPath)
 }

@@ -73,7 +73,13 @@ func (n NamingConfig) Resolve(template, artifact, osName, arch, version, abi, ex
 	)
 
 	result := r.Replace(template)
-	return strings.TrimSuffix(result, ".")
+	result = strings.Trim(result, "-.")
+
+	if formattedExt != "" && !strings.HasSuffix(result, "."+formattedExt) {
+		result = result + "." + formattedExt
+	}
+
+	return result
 }
 
 func (h Hooks) ResolveAll(artifact, osName, arch, version, abi, binaryPath string) Hooks {
@@ -124,9 +130,11 @@ func Load(path string) (*Config, error) {
 	if cfg.Naming.Binary == "" {
 		cfg.Naming.Binary = v.GetString("naming.binary")
 	}
+
 	if cfg.Naming.Package == "" {
 		cfg.Naming.Package = v.GetString("naming.package")
 	}
+
 	if cfg.OutputDir == "" {
 		cfg.OutputDir = v.GetString("output_dir")
 	}
@@ -157,8 +165,10 @@ func Default(name string) *Config {
 
 func (c *Config) Write(path string) error {
 	data, err := toml.Marshal(c)
+
 	if err != nil {
 		return err
 	}
+
 	return os.WriteFile(path, data, 0644)
 }
