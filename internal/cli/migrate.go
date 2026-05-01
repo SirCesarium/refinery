@@ -55,6 +55,8 @@ var migrateCmd = &cobra.Command{
 						runsOn = "windows-latest"
 					case "darwin":
 						runsOn = "macos-latest"
+					case "wasm", "wasi":
+						runsOn = "ubuntu-latest"
 					}
 
 					for _, arch := range tCfg.Archs {
@@ -109,6 +111,11 @@ var migrateCmd = &cobra.Command{
 						Name: "Setup Rust",
 						Uses: ActionSetupRust,
 						With: map[string]any{"cache": true},
+					},
+					{
+						Name: "Install WASM Tools",
+						If:   "matrix.os == 'wasm' || matrix.os == 'wasi'",
+						Run:  "curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh",
 					},
 					{
 						Name: "Install Refinery",
@@ -190,7 +197,9 @@ var migrateCmd = &cobra.Command{
 				},
 				Jobs: jobs,
 			}
+
 			provider, _ = github.NewProvider(wf, "refinery-build")
+
 		default:
 			fmt.Fprintf(os.Stderr, "Unsupported provider: %s\n", providerName)
 			os.Exit(1)
@@ -207,6 +216,7 @@ var migrateCmd = &cobra.Command{
 		dir := filepath.Dir(outputPath)
 		os.MkdirAll(dir, 0755)
 		os.WriteFile(outputPath, data, 0644)
+
 		fmt.Printf("Workflows generated successfully using %s provider at %s\n", provider.Name(), outputPath)
 	},
 }

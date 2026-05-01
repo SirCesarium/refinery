@@ -27,6 +27,10 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 		if opts.ABI != "" {
 			targetTriple = fmt.Sprintf("%s-%s", targetTriple, opts.ABI)
 		}
+	case "wasm":
+		targetTriple = "wasm32-unknown-unknown"
+	case "wasi":
+		targetTriple = "wasm32-wasip1"
 	default:
 		targetTriple = fmt.Sprintf("%s-unknown-%s", opts.Arch, opts.OS)
 		if opts.ABI != "" {
@@ -79,14 +83,17 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	}
 
 	ext := ""
-	if opts.OS == "windows" {
+	switch opts.OS {
+	case "windows":
 		ext = "exe"
+	case "wasm", "wasi":
+		ext = "wasm"
 	}
 
 	finalName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, "0.0.0", opts.ABI, ext)
 	srcBinary := opts.ArtifactName
-	if opts.OS == "windows" {
-		srcBinary += ".exe"
+	if ext != "" {
+		srcBinary += "." + ext
 	}
 
 	srcPath := filepath.Join("target", targetTriple, "release", srcBinary)

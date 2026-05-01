@@ -73,10 +73,13 @@ func (n NamingConfig) Resolve(template, artifact, osName, arch, version, abi, ex
 	)
 
 	result := r.Replace(template)
-	result = strings.Trim(result, "-.")
+	result = strings.Trim(result, "-")
 
-	if formattedExt != "" && !strings.HasSuffix(result, "."+formattedExt) {
-		result = result + "." + formattedExt
+	if formattedExt != "" {
+		if !strings.HasSuffix(result, "."+formattedExt) {
+			result = strings.TrimSuffix(result, ".")
+			result = result + "." + formattedExt
+		}
 	}
 
 	return result

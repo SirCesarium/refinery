@@ -47,6 +47,7 @@ type Strategy struct {
 type Step struct {
 	ID              string            `yaml:"id,omitempty"`
 	Name            string            `yaml:"name,omitempty"`
+	If              string            `yaml:"if,omitempty"`
 	Uses            string            `yaml:"uses,omitempty"`
 	With            map[string]any    `yaml:"with,omitempty"`
 	Run             string            `yaml:"run,omitempty"`
