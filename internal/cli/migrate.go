@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/SirCesarium/refinery/internal/app"
 	"github.com/SirCesarium/refinery/internal/config"
 	"github.com/SirCesarium/refinery/internal/pipeline"
-	"github.com/SirCesarium/refinery/internal/pipeline/github"
 	"github.com/spf13/cobra"
 )
 
@@ -23,22 +23,26 @@ var migrateCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		var provider pipeline.CIProvider
-		switch providerName {
-		case "github":
-			// Ahora manejamos el error que devuelve NewProvider
-			p, err := github.NewProvider("refinery-build")
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error initializing provider: %v\n", err)
-				os.Exit(1)
-			}
-			provider = p
-		default:
+		engineRegistry := app.NewDefaultEngineRegistry()
+		eng := engineRegistry.Get(cfg.Project.Lang)
+		if eng == nil {
+			fmt.Fprintf(os.Stderr, "Unsupported language: %s\n", cfg.Project.Lang)
+			os.Exit(1)
+		}
+
+		providerRegistry, err := app.NewDefaultProviderRegistry()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error initializing provider registry: %v\n", err)
+			os.Exit(1)
+		}
+
+		provider := providerRegistry.Get(providerName)
+		if provider == nil {
 			fmt.Fprintf(os.Stderr, "Unsupported provider: %s\n", providerName)
 			os.Exit(1)
 		}
 
-		gen := pipeline.NewGenerator(provider)
+		gen := pipeline.NewGenerator(provider, eng)
 		data, err := gen.Generate(cfg)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Generation failed: %v\n", err)

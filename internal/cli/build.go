@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/SirCesarium/refinery/internal/app"
 	"github.com/SirCesarium/refinery/internal/config"
 	"github.com/SirCesarium/refinery/internal/engine"
 	"github.com/spf13/cobra"
@@ -32,9 +33,7 @@ var buildCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		registry := engine.NewRegistry()
-		registry.Register(&engine.RustEngine{})
-
+		registry := app.NewDefaultEngineRegistry()
 		eng := registry.Get(cfg.Project.Lang)
 		if eng == nil {
 			fmt.Fprintf(os.Stderr, "No engine found for language: %s\n", cfg.Project.Lang)

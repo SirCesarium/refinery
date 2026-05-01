@@ -5,13 +5,26 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/SirCesarium/refinery/internal/config"
+	"github.com/pelletier/go-toml/v2"
 )
 
 type RustEngine struct{}
+
+type cargoManifest struct {
+	Package struct {
+		Name    string `toml:"name"`
+		Version string `toml:"version"`
+	} `toml:"package"`
+	Lib *struct {
+		Name string `toml:"name"`
+	} `toml:"lib"`
+	Bin []struct {
+		Name string `toml:"name"`
+	} `toml:"bin"`
+}
 
 func (e *RustEngine) ID() string {
 	return "rust"
@@ -24,131 +37,154 @@ func (e *RustEngine) Prepare(cfg *config.Config) error {
 	return nil
 }
 
-func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions) error {
-	var targetTriple string
-
-	switch opts.OS {
-	case "darwin":
-		targetTriple = fmt.Sprintf("%s-apple-darwin", opts.Arch)
-	case "windows":
-		targetTriple = fmt.Sprintf("%s-pc-windows", opts.Arch)
-		if opts.ABI != "" {
-			targetTriple = fmt.Sprintf("%s-%s", targetTriple, opts.ABI)
-		}
-	case "wasm":
-		targetTriple = "wasm32-unknown-unknown"
-	case "wasi":
-		targetTriple = "wasm32-wasip1"
-	default:
-		targetTriple = fmt.Sprintf("%s-unknown-%s", opts.Arch, opts.OS)
-		if opts.ABI != "" {
-			targetTriple = fmt.Sprintf("%s-%s", targetTriple, opts.ABI)
-		}
-	}
-
-	if runtime.GOOS == "linux" && opts.OS == "linux" && opts.Arch == "aarch64" {
-		if _, err := exec.LookPath("aarch64-linux-gnu-gcc"); err != nil {
-			if err := exec.Command("sudo", "apt-get", "update").Run(); err != nil {
-				return err
-			}
-			if err := exec.Command("sudo", "apt-get", "install", "-y", "gcc-aarch64-linux-gnu").Run(); err != nil {
-				return err
-			}
-		}
-
-		os.Setenv("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER", "aarch64-linux-gnu-gcc")
-		os.Setenv("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER", "aarch64-linux-gnu-gcc")
-	}
-
-	if runtime.GOOS == "darwin" && opts.OS == "darwin" {
-		if _, err := os.Stat("/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"); err == nil {
-			os.Setenv("SDKROOT", "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk")
-		}
-
-		os.Setenv("MACOSX_DEPLOYMENT_TARGET", "11.0")
-	}
-
-	setupCmd := exec.Command("rustup", "target", "add", targetTriple)
-
-	setupCmd.Stdout = os.Stdout
-	setupCmd.Stderr = os.Stderr
-
-	if err := setupCmd.Run(); err != nil {
-		return fmt.Errorf("failed to add target %s: %w", targetTriple, err)
-	}
-
-	args := []string{"build", "--release", "--target", targetTriple}
-
-	var srcFileName string
-
-	if art.Type == "lib" {
-		args = append(args, "--lib")
-
-		cargoTomlBytes, err := os.ReadFile("Cargo.toml")
-		if err == nil {
-			cargoContent := string(cargoTomlBytes)
-			if strings.Contains(cargoContent, "[lib]") {
-				lines := strings.Split(cargoContent, "\n")
-				inLibSection := false
-				for _, line := range lines {
-					if strings.Contains(line, "[lib]") {
-						inLibSection = true
-					} else if strings.HasPrefix(line, "[") && strings.Contains(line, "]") {
-						inLibSection = false
-					} else if inLibSection && strings.Contains(line, "name =") {
-						parts := strings.SplitN(line, "=", 2)
-						if len(parts) == 2 {
-							srcFileName = strings.TrimSpace(parts[1])
-							srcFileName = strings.Trim(srcFileName, "\"")
-						}
-					}
-				}
-			}
-		}
-
-		if srcFileName == "" {
-			srcFileName = strings.ReplaceAll(cfg.Project.Name, "-", "_")
-		}
-	} else {
-		args = append(args, "--bin", opts.ArtifactName)
-		srcFileName = opts.ArtifactName
-	}
-
-	cmd := exec.Command("cargo", args...)
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Env = os.Environ()
-
-	if err := cmd.Run(); err != nil {
+func (e *RustEngine) Validate(cfg *config.Config) error {
+	manifest, err := e.loadManifest()
+	if err != nil {
 		return err
 	}
 
-	ext := ""
-	prefix := ""
-	switch opts.OS {
-	case "windows":
-		if art.Type == "bin" {
-			ext = "exe"
-		} else {
-			ext = "dll"
-		}
-	case "wasm", "wasi":
-		ext = "wasm"
-	case "linux", "darwin":
+	for name, art := range cfg.Artifacts {
+		found := false
 		if art.Type == "lib" {
-			prefix = "lib"
-			if opts.OS == "linux" {
-				ext = "so"
-			} else {
-				ext = "dylib"
+			if manifest.Lib != nil && manifest.Lib.Name == name {
+				found = true
+			}
+			if !found && strings.ReplaceAll(manifest.Package.Name, "-", "_") == name {
+				found = true
+			}
+		} else {
+			for _, b := range manifest.Bin {
+				if b.Name == name {
+					found = true
+					break
+				}
+			}
+			if !found && manifest.Package.Name == name {
+				found = true
+			}
+		}
+
+		if !found {
+			return fmt.Errorf("artifact mismatch: '%s' (type %s) defined in refinery.toml not found in Cargo.toml", name, art.Type)
+		}
+	}
+	return nil
+}
+
+func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions) error {
+	targetTriple := e.resolveTarget(opts)
+	manifest, err := e.loadManifest()
+	if err != nil {
+		return err
+	}
+
+	if err := e.setupEnvironment(art, opts, targetTriple); err != nil {
+		return err
+	}
+
+	if err := e.addTarget(targetTriple); err != nil {
+		return err
+	}
+
+	if err := e.runCargoBuild(cfg, art, opts, targetTriple); err != nil {
+		return err
+	}
+
+	return e.moveArtifact(cfg, art, opts, targetTriple, manifest.Package.Version)
+}
+
+func (e *RustEngine) GetCIRequirements() []string {
+	return []string{"rust"}
+}
+
+func (e *RustEngine) loadManifest() (*cargoManifest, error) {
+	cargoBytes, err := os.ReadFile("Cargo.toml")
+	if err != nil {
+		return nil, fmt.Errorf("could not read Cargo.toml: %w", err)
+	}
+
+	var manifest cargoManifest
+	if err := toml.Unmarshal(cargoBytes, &manifest); err != nil {
+		return nil, fmt.Errorf("error parsing Cargo.toml: %w", err)
+	}
+	return &manifest, nil
+}
+
+func (e *RustEngine) resolveTarget(opts BuildOptions) string {
+	switch opts.OS {
+	case "darwin":
+		return fmt.Sprintf("%s-apple-darwin", opts.Arch)
+	case "windows":
+		triple := fmt.Sprintf("%s-pc-windows", opts.Arch)
+		if opts.ABI != "" {
+			triple = fmt.Sprintf("%s-%s", triple, opts.ABI)
+		}
+		return triple
+	case "wasm":
+		return "wasm32-unknown-unknown"
+	case "wasi":
+		return "wasm32-wasip1"
+	default:
+		triple := fmt.Sprintf("%s-unknown-%s", opts.Arch, opts.OS)
+		if opts.ABI != "" {
+			triple = fmt.Sprintf("%s-%s", triple, opts.ABI)
+		}
+		return triple
+	}
+}
+
+func (e *RustEngine) setupEnvironment(art *config.ArtifactConfig, opts BuildOptions, target string) error {
+	for tName, tCfg := range art.Targets {
+		if tName == opts.OS {
+			if linker, ok := tCfg.LangOpts["linker"].(string); ok {
+				envKey := fmt.Sprintf("CARGO_TARGET_%s_LINKER",
+					strings.ReplaceAll(strings.ReplaceAll(strings.ToUpper(target), "-", "_"), ".", "_"))
+				os.Setenv(envKey, linker)
+			}
+			if depTarget, ok := tCfg.LangOpts["deployment_target"].(string); ok {
+				os.Setenv("MACOSX_DEPLOYMENT_TARGET", depTarget)
+			}
+			if sdk, ok := tCfg.LangOpts["sdk_root"].(string); ok {
+				os.Setenv("SDKROOT", sdk)
 			}
 		}
 	}
 
-	finalName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, "0.0.0", opts.ABI, ext)
+	if opts.OS == "darwin" && os.Getenv("MACOSX_DEPLOYMENT_TARGET") == "" {
+		os.Setenv("MACOSX_DEPLOYMENT_TARGET", "11.0")
+	}
+	return nil
+}
 
-	realSrcName := srcFileName
+func (e *RustEngine) addTarget(target string) error {
+	cmd := exec.Command("rustup", "target", "add", target)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func (e *RustEngine) runCargoBuild(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, target string) error {
+	profile := "release"
+	args := []string{"build", "--" + profile, "--target", target}
+	
+	if art.Type == "lib" {
+		args = append(args, "--lib")
+	} else {
+		args = append(args, "--bin", opts.ArtifactName)
+	}
+
+	cmd := exec.Command("cargo", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Env = os.Environ()
+	return cmd.Run()
+}
+
+func (e *RustEngine) moveArtifact(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, target, version string) error {
+	ext, prefix := e.getArtifactAttributes(opts, art.Type)
+	finalName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, version, opts.ABI, ext)
+
+	realSrcName := opts.ArtifactName
 	if prefix != "" && !strings.HasPrefix(realSrcName, prefix) {
 		realSrcName = prefix + realSrcName
 	}
@@ -156,16 +192,8 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 		realSrcName += "." + ext
 	}
 
-	srcPath := filepath.Join("target", targetTriple, "release", realSrcName)
+	srcPath := filepath.Join("target", target, "release", realSrcName)
 	distPath := filepath.Join(cfg.OutputDir, finalName)
-
-	if _, err := os.Stat(srcPath); os.IsNotExist(err) && art.Type == "lib" {
-		pattern := filepath.Join("target", targetTriple, "release", prefix+"*."+ext)
-		matches, _ := filepath.Glob(pattern)
-		if len(matches) > 0 {
-			srcPath = matches[0]
-		}
-	}
 
 	if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
 		return err
@@ -176,4 +204,27 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	}
 
 	return os.Rename(srcPath, distPath)
+}
+
+func (e *RustEngine) getArtifactAttributes(opts BuildOptions, artType string) (string, string) {
+	var ext, prefix string
+	switch opts.OS {
+	case "windows":
+		if artType == "bin" {
+			ext = "exe"
+		} else {
+			ext = "dll"
+		}
+	case "wasm", "wasi":
+		ext = "wasm"
+	case "linux", "darwin":
+		if artType == "lib" {
+			prefix = "lib"
+			ext = "so"
+			if opts.OS == "darwin" {
+				ext = "dylib"
+			}
+		}
+	}
+	return ext, prefix
 }

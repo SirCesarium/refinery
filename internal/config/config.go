@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -48,6 +49,41 @@ type NamingConfig struct {
 	Package string `toml:"package,omitempty" mapstructure:"package"`
 }
 
+func (c *Config) Validate() error {
+	if c.RefineryVersion == "" {
+		return fmt.Errorf("refinery_version is required")
+	}
+	if c.Project.Name == "" || c.Project.Lang == "" {
+		return fmt.Errorf("project name and lang are required")
+	}
+	if c.OutputDir == "" {
+		return fmt.Errorf("output_dir is required")
+	}
+	if c.Naming.Binary == "" || c.Naming.Package == "" {
+		return fmt.Errorf("naming binary and package are required")
+	}
+	if len(c.Artifacts) == 0 {
+		return fmt.Errorf("at least one artifact must be defined")
+	}
+	for name, art := range c.Artifacts {
+		if art.Type != "bin" && art.Type != "lib" {
+			return fmt.Errorf("artifact %s type must be 'bin' or 'lib'", name)
+		}
+		if art.Source == "" {
+			return fmt.Errorf("artifact %s source is required", name)
+		}
+		if len(art.Targets) == 0 {
+			return fmt.Errorf("artifact %s must have at least one target", name)
+		}
+		for tName, tCfg := range art.Targets {
+			if len(tCfg.Archs) == 0 {
+				return fmt.Errorf("target %s in artifact %s must have at least one arch", tName, name)
+			}
+		}
+	}
+	return nil
+}
+
 func (n NamingConfig) Resolve(template, artifact, osName, arch, version, abi, ext string) string {
 	if template == "" {
 		return ""
@@ -83,29 +119,6 @@ func (n NamingConfig) Resolve(template, artifact, osName, arch, version, abi, ex
 	}
 
 	return result
-}
-
-func (h Hooks) ResolveAll(artifact, osName, arch, version, abi, binaryPath string) Hooks {
-	resolve := func(scripts []string) []string {
-		resolved := make([]string, len(scripts))
-		r := strings.NewReplacer(
-			"{artifact}", artifact,
-			"{os}", osName,
-			"{arch}", arch,
-			"{version}", version,
-			"{abi}", abi,
-			"{binary}", binaryPath,
-		)
-		for i, s := range scripts {
-			resolved[i] = r.Replace(s)
-		}
-		return resolved
-	}
-
-	return Hooks{
-		PreBuild:  resolve(h.PreBuild),
-		PostBuild: resolve(h.PostBuild),
-	}
 }
 
 func Load(path string) (*Config, error) {
@@ -151,6 +164,10 @@ func Load(path string) (*Config, error) {
 		}
 	}
 
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
 	return cfg, nil
 }
 
@@ -163,6 +180,10 @@ func Default(name string) *Config {
 		},
 		OutputDir: "dist",
 		Artifacts: make(map[string]*ArtifactConfig),
+		Naming: NamingConfig{
+			Binary:  "{artifact}-{os}-{arch}{abi}",
+			Package: "{artifact}-{version}-{os}-{arch}{abi}.{ext}",
+		},
 	}
 }
 

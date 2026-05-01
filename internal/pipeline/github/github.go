@@ -6,17 +6,8 @@ import (
 	"sort"
 
 	"github.com/SirCesarium/refinery/internal/config"
-	"github.com/SirCesarium/refinery/internal/pipeline"
+	"github.com/SirCesarium/refinery/internal/engine"
 	"gopkg.in/yaml.v3"
-)
-
-const (
-	ActionCheckout         = "actions/checkout@v6"
-	ActionSetupGo          = "actions/setup-go@v6"
-	ActionUploadArtifact   = "actions/upload-artifact@v7"
-	ActionDownloadArtifact = "actions/download-artifact@v8"
-	ActionGHRelease        = "softprops/action-gh-release@v3"
-	ActionRustToolchain    = "actions-rust-lang/setup-rust-toolchain@v1"
 )
 
 type Workflow struct {
@@ -78,22 +69,11 @@ func (p *GithubProvider) Filename() string {
 	return filepath.Join(".github", "workflows", fmt.Sprintf("%s.yml", p.filename))
 }
 
-func (p *GithubProvider) GetSetupSteps(lang string) []pipeline.Step {
-	switch lang {
-	case "rust":
-		return []pipeline.Step{
-			{Name: "Setup Rust", Run: ActionRustToolchain},
-		}
-	case "go":
-		return []pipeline.Step{
-			{Name: "Setup Go", Run: ActionSetupGo},
-		}
-	default:
-		return nil
+func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([]byte, error) {
+	if err := eng.Validate(cfg); err != nil {
+		return nil, err
 	}
-}
 
-func (p *GithubProvider) Generate(cfg *config.Config) ([]byte, error) {
 	var artifactNames []string
 	for name := range cfg.Artifacts {
 		artifactNames = append(artifactNames, name)
@@ -151,11 +131,12 @@ func (p *GithubProvider) Generate(cfg *config.Config) ([]byte, error) {
 		},
 	}
 
-	for _, s := range p.GetSetupSteps(cfg.Project.Lang) {
-		if s.Run != "" && s.Name != "Setup Go" {
+	for _, req := range eng.GetCIRequirements() {
+		switch req {
+		case "rust":
 			buildSteps = append(buildSteps, Step{
-				Name: s.Name,
-				Uses: s.Run,
+				Name: "Setup Rust",
+				Uses: ActionRustToolchain,
 				With: map[string]any{"cache": true},
 			})
 		}
@@ -182,7 +163,7 @@ func (p *GithubProvider) Generate(cfg *config.Config) ([]byte, error) {
 		Uses: ActionUploadArtifact,
 		With: map[string]any{
 			"name":              "bin-${{ matrix.artifact }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}",
-			"path":              "dist/*",
+			"path":              cfg.OutputDir + "/*",
 			"if-no-files-found": "error",
 			"compression-level": 0,
 		},
