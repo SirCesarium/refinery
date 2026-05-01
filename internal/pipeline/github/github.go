@@ -64,6 +64,9 @@ type GithubProvider struct {
 }
 
 func NewProvider(filename string) (*GithubProvider, error) {
+	if filename == "" {
+		return nil, fmt.Errorf("workflow filename cannot be empty")
+	}
 	return &GithubProvider{filename: filename}, nil
 }
 
@@ -159,11 +162,6 @@ func (p *GithubProvider) Generate(cfg *config.Config) ([]byte, error) {
 	}
 
 	buildSteps = append(buildSteps, Step{
-		Name: "Debug: Pre-Install",
-		Run:  "env && pwd",
-	})
-
-	buildSteps = append(buildSteps, Step{
 		Name: "Install Refinery",
 		Run:  "go install github.com/SirCesarium/refinery/cmd/refinery@main",
 	})
@@ -176,25 +174,7 @@ func (p *GithubProvider) Generate(cfg *config.Config) ([]byte, error) {
 
 	buildSteps = append(buildSteps, Step{
 		Name: "Build Artifact",
-		Uses: "SirCesarium/refinery@main",
-		With: map[string]any{
-			"artifact": "${{ matrix.artifact }}",
-			"os":       "${{ matrix.os }}",
-			"arch":     "${{ matrix.arch }}",
-			"abi":      "${{ matrix.abi }}",
-		},
-	})
-
-	buildSteps = append(buildSteps, Step{
-		Name: "Debug: Post-Build Tree",
-		Run:  "ls -R target/ || echo 'target/ not found'",
-		If:   "always()",
-	})
-
-	buildSteps = append(buildSteps, Step{
-		Name: "Debug: Dist Contents",
-		Run:  "ls -R dist/ || echo 'dist/ not found'",
-		If:   "always()",
+		Run:  "refinery build --artifact ${{ matrix.artifact }} --os ${{ matrix.os }} --arch ${{ matrix.arch }} ${{ matrix.abi && format('--abi {0}', matrix.abi) }}",
 	})
 
 	buildSteps = append(buildSteps, Step{
@@ -213,7 +193,7 @@ func (p *GithubProvider) Generate(cfg *config.Config) ([]byte, error) {
 			Name:   "Build ${{ matrix.artifact }} (${{ matrix.os }}-${{ matrix.arch }})",
 			RunsOn: "${{ matrix.runs_on }}",
 			Strategy: &Strategy{
-				FailFast: false,
+				FailFast: true,
 				Matrix:   map[string]any{"include": include},
 			},
 			Steps: buildSteps,

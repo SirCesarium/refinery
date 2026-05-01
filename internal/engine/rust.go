@@ -48,8 +48,12 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 
 	if runtime.GOOS == "linux" && opts.OS == "linux" && opts.Arch == "aarch64" {
 		if _, err := exec.LookPath("aarch64-linux-gnu-gcc"); err != nil {
-			exec.Command("sudo", "apt-get", "update").Run()
-			exec.Command("sudo", "apt-get", "install", "-y", "gcc-aarch64-linux-gnu").Run()
+			if err := exec.Command("sudo", "apt-get", "update").Run(); err != nil {
+				return err
+			}
+			if err := exec.Command("sudo", "apt-get", "install", "-y", "gcc-aarch64-linux-gnu").Run(); err != nil {
+				return err
+			}
 		}
 
 		os.Setenv("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER", "aarch64-linux-gnu-gcc")
@@ -79,7 +83,32 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 
 	if art.Type == "lib" {
 		args = append(args, "--lib")
-		srcFileName = strings.ReplaceAll(cfg.Project.Name, "-", "_")
+
+		cargoTomlBytes, err := os.ReadFile("Cargo.toml")
+		if err == nil {
+			cargoContent := string(cargoTomlBytes)
+			if strings.Contains(cargoContent, "[lib]") {
+				lines := strings.Split(cargoContent, "\n")
+				inLibSection := false
+				for _, line := range lines {
+					if strings.Contains(line, "[lib]") {
+						inLibSection = true
+					} else if strings.HasPrefix(line, "[") && strings.Contains(line, "]") {
+						inLibSection = false
+					} else if inLibSection && strings.Contains(line, "name =") {
+						parts := strings.SplitN(line, "=", 2)
+						if len(parts) == 2 {
+							srcFileName = strings.TrimSpace(parts[1])
+							srcFileName = strings.Trim(srcFileName, "\"")
+						}
+					}
+				}
+			}
+		}
+
+		if srcFileName == "" {
+			srcFileName = strings.ReplaceAll(cfg.Project.Name, "-", "_")
+		}
 	} else {
 		args = append(args, "--bin", opts.ArtifactName)
 		srcFileName = opts.ArtifactName
@@ -120,7 +149,7 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	finalName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, "0.0.0", opts.ABI, ext)
 
 	realSrcName := srcFileName
-	if prefix != "" {
+	if prefix != "" && !strings.HasPrefix(realSrcName, prefix) {
 		realSrcName = prefix + realSrcName
 	}
 	if ext != "" {
@@ -130,22 +159,19 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	srcPath := filepath.Join("target", targetTriple, "release", realSrcName)
 	distPath := filepath.Join(cfg.OutputDir, finalName)
 
-	fmt.Printf("[DEBUG] Artifact Name: %s\n", opts.ArtifactName)
-	fmt.Printf("[DEBUG] Project Name: %s\n", cfg.Project.Name)
-	fmt.Printf("[DEBUG] Source File Name: %s\n", realSrcName)
-	fmt.Printf("[DEBUG] Expected Source Path: %s\n", srcPath)
-	fmt.Printf("[DEBUG] Destination Path: %s\n", distPath)
+	if _, err := os.Stat(srcPath); os.IsNotExist(err) && art.Type == "lib" {
+		pattern := filepath.Join("target", targetTriple, "release", prefix+"*."+ext)
+		matches, _ := filepath.Glob(pattern)
+		if len(matches) > 0 {
+			srcPath = matches[0]
+		}
+	}
 
 	if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
 		return err
 	}
 
 	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-		fmt.Printf("[DEBUG] Source path not found. Contents of %s:\n", filepath.Dir(srcPath))
-		files, _ := os.ReadDir(filepath.Dir(srcPath))
-		for _, f := range files {
-			fmt.Printf(" - %s\n", f.Name())
-		}
 		return fmt.Errorf("artifact not found at %s", srcPath)
 	}
 
