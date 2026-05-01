@@ -22,8 +22,7 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	case "darwin":
 		targetTriple = fmt.Sprintf("%s-apple-darwin", opts.Arch)
 	case "windows":
-		vendor := "pc"
-		targetTriple = fmt.Sprintf("%s-%s-windows", opts.Arch, vendor)
+		targetTriple = fmt.Sprintf("%s-pc-windows", opts.Arch)
 		if opts.ABI != "" {
 			targetTriple = fmt.Sprintf("%s-%s", targetTriple, opts.ABI)
 		}
@@ -36,10 +35,8 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 
 	if runtime.GOOS == "linux" && opts.OS == "linux" && opts.Arch == "aarch64" {
 		if _, err := exec.LookPath("aarch64-linux-gnu-gcc"); err != nil {
-			if os.Geteuid() == 0 || os.Getenv("GITHUB_ACTIONS") == "true" {
-				exec.Command("apt-get", "update").Run()
-				exec.Command("apt-get", "install", "-y", "gcc-aarch64-linux-gnu").Run()
-			}
+			exec.Command("sudo", "apt-get", "update").Run()
+			exec.Command("sudo", "apt-get", "install", "-y", "gcc-aarch64-linux-gnu").Run()
 		}
 
 		os.Setenv("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER", "aarch64-linux-gnu-gcc")
