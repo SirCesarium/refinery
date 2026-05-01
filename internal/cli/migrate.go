@@ -11,6 +11,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	ActionCheckout  = "actions/checkout@v6"
+	ActionSetupGo   = "actions/setup-go@v6"
+	ActionSetupRust = "actions-rust-lang/setup-rust-toolchain@v1"
+	ActionUpload    = "actions/upload-artifact@v7"
+	ActionDownload  = "actions/download-artifact@v8"
+	ActionRelease   = "softprops/action-gh-release@v3"
+	RefineryAction  = "SirCesarium/refinery@main"
+)
+
 var migrateCmd = &cobra.Command{
 	Use:   "migrate [provider]",
 	Short: "Generate CI/CD workflows using a specific provider",
@@ -70,16 +80,16 @@ var migrateCmd = &cobra.Command{
 					Steps: []github.Step{
 						{
 							Name: "Checkout",
-							Uses: "actions/checkout@v6",
+							Uses: ActionCheckout,
 						},
 						{
 							Name: "Setup Go",
-							Uses: "actions/setup-go@v6",
+							Uses: ActionSetupGo,
 							With: map[string]any{"go-version": "stable", "cache": true},
 						},
 						{
 							Name: "Setup Rust",
-							Uses: "actions-rust-lang/setup-rust-toolchain@v1",
+							Uses: ActionSetupRust,
 							With: map[string]any{"cache": true},
 						},
 						{
@@ -97,7 +107,7 @@ var migrateCmd = &cobra.Command{
 						},
 						{
 							Name: "Build Artifact",
-							Uses: "SirCesarium/refinery@main",
+							Uses: RefineryAction,
 							With: map[string]any{
 								"artifact": aName,
 								"os":       "${{ matrix.os }}",
@@ -107,9 +117,9 @@ var migrateCmd = &cobra.Command{
 						},
 						{
 							Name: "Upload",
-							Uses: "actions/upload-artifact@v7",
+							Uses: ActionUpload,
 							With: map[string]any{
-								"name":              "bin-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}",
+								"name":              fmt.Sprintf("bin-%s-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}", aName),
 								"path":              "dist/*",
 								"if-no-files-found": "error",
 								"compression-level": 0,
@@ -127,7 +137,7 @@ var migrateCmd = &cobra.Command{
 				Steps: []github.Step{
 					{
 						Name: "Download",
-						Uses: "actions/download-artifact@v8",
+						Uses: ActionDownload,
 						With: map[string]any{
 							"path":           "./artifacts",
 							"merge-multiple": true,
@@ -135,7 +145,7 @@ var migrateCmd = &cobra.Command{
 					},
 					{
 						Name: "Publish",
-						Uses: "softprops/action-gh-release@v3",
+						Uses: ActionRelease,
 						With: map[string]any{
 							"files":                   "./artifacts/*",
 							"fail_on_unmatched_files": true,
