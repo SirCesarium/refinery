@@ -21,5 +21,3 @@ require (
 	golang.org/x/text v0.28.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1
 )
-
-replace gopkg.in/yaml.v3 => github.com/go-yaml/yaml/v3 v3.0.1
