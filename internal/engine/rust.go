@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/SirCesarium/refinery/internal/config"
 )
@@ -73,10 +74,15 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	}
 
 	args := []string{"build", "--release", "--target", targetTriple}
+
+	var srcFileName string
+
 	if art.Type == "lib" {
 		args = append(args, "--lib")
+		srcFileName = strings.ReplaceAll(cfg.Project.Name, "-", "_")
 	} else {
 		args = append(args, "--bin", opts.ArtifactName)
+		srcFileName = opts.ArtifactName
 	}
 
 	cmd := exec.Command("cargo", args...)
@@ -90,24 +96,46 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	}
 
 	ext := ""
+	prefix := ""
 	switch opts.OS {
 	case "windows":
-		ext = "exe"
+		if art.Type == "bin" {
+			ext = "exe"
+		} else {
+			ext = "dll"
+		}
 	case "wasm", "wasi":
 		ext = "wasm"
+	case "linux", "darwin":
+		if art.Type == "lib" {
+			prefix = "lib"
+			if opts.OS == "linux" {
+				ext = "so"
+			} else {
+				ext = "dylib"
+			}
+		}
 	}
 
 	finalName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, "0.0.0", opts.ABI, ext)
-	srcBinary := opts.ArtifactName
+
+	realSrcName := srcFileName
+	if prefix != "" {
+		realSrcName = prefix + realSrcName
+	}
 	if ext != "" {
-		srcBinary += "." + ext
+		realSrcName += "." + ext
 	}
 
-	srcPath := filepath.Join("target", targetTriple, "release", srcBinary)
+	srcPath := filepath.Join("target", targetTriple, "release", realSrcName)
 	distPath := filepath.Join(cfg.OutputDir, finalName)
 
 	if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
 		return err
+	}
+
+	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+		return fmt.Errorf("artifact not found at %s. Check if [lib] name in Cargo.toml matches project name", srcPath)
 	}
 
 	return os.Rename(srcPath, distPath)
