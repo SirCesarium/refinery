@@ -138,11 +138,13 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 		case req == "cross-linker:linux-aarch64":
 			buildSteps = append(buildSteps, Step{
 				Name: "Install ARM Linker",
+				If:   "runner.os == 'Linux'",
 				Run:  "sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu",
 			})
 		case req == "pkg:musl-tools":
 			buildSteps = append(buildSteps, Step{
 				Name: "Install Musl Tools",
+				If:   "runner.os == 'Linux'",
 				Run:  "sudo apt-get update && sudo apt-get install -y musl-tools",
 			})
 		}
