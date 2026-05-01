@@ -16,6 +16,13 @@ func (e *RustEngine) ID() string {
 	return "rust"
 }
 
+func (e *RustEngine) Prepare(cfg *config.Config) error {
+	if _, err := exec.LookPath("rustup"); err != nil {
+		return fmt.Errorf("rustup not found in PATH")
+	}
+	return nil
+}
+
 func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions) error {
 	var targetTriple string
 

@@ -13,6 +13,7 @@ type BuildOptions struct {
 
 type BuildEngine interface {
 	ID() string
+	Prepare(cfg *config.Config) error
 	Build(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions) error
 }
 
