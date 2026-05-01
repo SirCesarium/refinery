@@ -1,0 +1,39 @@
+name: Refinery Builder
+description: Builds and prepares artifacts for delivery
+
+inputs:
+  artifact:
+    description: Name of the artifact to build
+    required: true
+  os:
+    description: Target operating system
+    required: true
+  arch:
+    description: Target architecture
+    required: true
+  abi:
+    description: Target ABI
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run refinery build
+      shell: bash
+      run: |
+        ABI_FLAG=""
+        if [ -n "${{ inputs.abi }}" ]; then ABI_FLAG="--abi ${{ inputs.abi }}"; fi
+        refinery build --artifact ${{ inputs.artifact }} --os ${{ inputs.os }} --arch ${{ inputs.arch }} $ABI_FLAG
+
+    - name: Prepare distribution
+      shell: bash
+      run: |
+        mkdir -p dist
+        find target -type f \( -name "${{ inputs.artifact }}" -o -name "${{ inputs.artifact }}.exe" \) -not -path "*/debug/*" -exec cp {} dist/ \;
+        cd dist
+        for f in ${{ inputs.artifact }}*; do
+          FINAL_NAME="${{ inputs.os }}-${{ inputs.arch }}"
+          if [ -n "${{ inputs.abi }}" ]; then FINAL_NAME="${FINAL_NAME}-${{ inputs.abi }}"; fi
+          mv "$f" "${FINAL_NAME}-$f"
+        done

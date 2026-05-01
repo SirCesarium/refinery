@@ -27,8 +27,13 @@ var migrateCmd = &cobra.Command{
 		switch providerName {
 		case "github":
 			jobs := make(map[string]github.Job)
+			var buildJobNames []string
+
 			for aName, art := range cfg.Artifacts {
+				jobID := "build-" + aName
+				buildJobNames = append(buildJobNames, jobID)
 				var include []map[string]any
+
 				for tName, tCfg := range art.Targets {
 					runsOn := "ubuntu-latest"
 					switch tName {
@@ -53,11 +58,11 @@ var migrateCmd = &cobra.Command{
 					}
 				}
 
-				jobs["build-"+aName] = github.Job{
+				jobs[jobID] = github.Job{
 					Name:   "Build " + aName,
 					RunsOn: "${{ matrix.runs_on }}",
 					Strategy: &github.Strategy{
-						FailFast: false,
+						FailFast: true,
 						Matrix: map[string]any{
 							"include": include,
 						},
@@ -70,26 +75,73 @@ var migrateCmd = &cobra.Command{
 						{
 							Name: "Setup Go",
 							Uses: "actions/setup-go@v6",
-							With: map[string]any{
-								"go-version": "stable",
-							},
+							With: map[string]any{"go-version": "stable", "cache": true},
 						},
 						{
 							Name: "Setup Rust",
 							Uses: "actions-rust-lang/setup-rust-toolchain@v1",
+							With: map[string]any{"cache": true},
 						},
 						{
 							Name: "Install Refinery",
 							Run:  "go install github.com/SirCesarium/refinery/cmd/refinery@main",
+							Env: map[string]string{
+								"GOPROXY":   "https://proxy.golang.org,direct",
+								"GOPRIVATE": "github.com/SirCesarium/*",
+							},
 						},
 						{
-							Name:  "Build",
-							Shell: "bash",
-							Run:   fmt.Sprintf(`ABI_FLAG=""; if [ -n "${{ matrix.abi }}" ]; then ABI_FLAG="--abi ${{ matrix.abi }}"; fi; refinery build --artifact %s --os ${{ matrix.os }} --arch ${{ matrix.arch }} $ABI_FLAG`, aName),
+							Name: "Build Artifact",
+							Uses: "./",
+							With: map[string]any{
+								"artifact": aName,
+								"os":       "${{ matrix.os }}",
+								"arch":     "${{ matrix.arch }}",
+								"abi":      "${{ matrix.abi }}",
+							},
+						},
+						{
+							Name: "Upload",
+							Uses: "actions/upload-artifact@v7",
+							With: map[string]any{
+								"name":              fmt.Sprintf("bin-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}"),
+								"path":              "dist/*",
+								"if-no-files-found": "error",
+								"compression-level": 0,
+							},
 						},
 					},
 				}
 			}
+
+			jobs["release"] = github.Job{
+				Name:   "Release Artifacts",
+				Needs:  buildJobNames,
+				RunsOn: "ubuntu-latest",
+				If:     "startsWith(github.ref, 'refs/tags/')",
+				Steps: []github.Step{
+					{
+						Name: "Download",
+						Uses: "actions/download-artifact@v8",
+						With: map[string]any{
+							"path":           "./artifacts",
+							"merge-multiple": true,
+						},
+					},
+					{
+						Name: "Publish",
+						Uses: "softprops/action-gh-release@v3",
+						With: map[string]any{
+							"files":                   "./artifacts/*",
+							"fail_on_unmatched_files": true,
+						},
+						Env: map[string]string{
+							"GITHUB_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
+						},
+					},
+				},
+			}
+
 			wf := github.Workflow{
 				Name: "Refinery Build Pipeline",
 				On: github.On{
@@ -99,6 +151,10 @@ var migrateCmd = &cobra.Command{
 					Release: map[string]any{
 						"types": []string{"created"},
 					},
+				},
+				Permissions: map[string]string{
+					"contents": "write",
+					"packages": "write",
 				},
 				Jobs: jobs,
 			}
