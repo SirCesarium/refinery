@@ -54,8 +54,8 @@ type GithubProvider struct {
 	filename string
 }
 
-func NewProvider(filename string) *GithubProvider {
-	return &GithubProvider{filename: filename}
+func NewProvider(filename string) (*GithubProvider, error) {
+	return &GithubProvider{filename: filename}, nil
 }
 
 func (p *GithubProvider) Name() string {
@@ -89,18 +89,32 @@ func (p *GithubProvider) Generate(cfg *config.Config) ([]byte, error) {
 	sort.Strings(artifactNames)
 
 	var include []map[string]any
+	uniqueMatrix := make(map[string]bool)
+
 	for _, aName := range artifactNames {
 		art := cfg.Artifacts[aName]
 		for osName, tCfg := range art.Targets {
 			runsOn := "ubuntu-latest"
-			if osName == "windows" {
+			switch osName {
+			case "windows":
 				runsOn = "windows-latest"
-			} else if osName == "darwin" {
+			case "darwin":
 				runsOn = "macos-latest"
 			}
 
 			for _, arch := range tCfg.Archs {
-				for _, abi := range tCfg.ABIs {
+				abis := tCfg.ABIs
+				if len(abis) == 0 {
+					abis = []string{""}
+				}
+
+				for _, abi := range abis {
+					key := fmt.Sprintf("%s-%s-%s-%s", aName, osName, arch, abi)
+					if uniqueMatrix[key] {
+						continue
+					}
+					uniqueMatrix[key] = true
+
 					m := map[string]any{
 						"artifact": aName,
 						"os":       osName,
@@ -116,23 +130,40 @@ func (p *GithubProvider) Generate(cfg *config.Config) ([]byte, error) {
 		}
 	}
 
-	steps := []Step{
+	buildSteps := []Step{
 		{Name: "Checkout", Uses: "actions/checkout@v6"},
+		{
+			Name: "Setup Go",
+			Uses: "actions/setup-go@v6",
+			With: map[string]any{"go-version": "stable", "cache": true},
+		},
 	}
 
 	for _, s := range p.GetSetupSteps(cfg.Project.Lang) {
-		if s.Run != "" {
-			steps = append(steps, Step{Name: s.Name, Uses: s.Run})
+		if s.Run != "" && s.Name != "Setup Go" {
+			buildSteps = append(buildSteps, Step{Name: s.Name, Uses: s.Run, With: map[string]any{"cache": true}})
 		}
 	}
 
-	steps = append(steps, Step{
+	buildSteps = append(buildSteps, Step{
+		Name: "Install WASM Tools",
+		If:   "matrix.os == 'wasm' || matrix.os == 'wasi'",
+		Run:  "curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh",
+	})
+
+	buildSteps = append(buildSteps, Step{
 		Name: "Install Refinery",
 		Run:  "go install github.com/SirCesarium/refinery/cmd/refinery@main",
 	})
 
-	steps = append(steps, Step{
-		Name: "Build",
+	buildSteps = append(buildSteps, Step{
+		Name:  "Add GOBIN to PATH",
+		Run:   "echo \"$(go env GOPATH)/bin\" >> $GITHUB_PATH",
+		Shell: "bash",
+	})
+
+	buildSteps = append(buildSteps, Step{
+		Name: "Build Artifact",
 		Uses: "SirCesarium/refinery@main",
 		With: map[string]any{
 			"artifact": "${{ matrix.artifact }}",
@@ -142,21 +173,69 @@ func (p *GithubProvider) Generate(cfg *config.Config) ([]byte, error) {
 		},
 	})
 
+	buildSteps = append(buildSteps, Step{
+		Name: "Upload",
+		Uses: "actions/upload-artifact@v7",
+		With: map[string]any{
+			"name":              "bin-${{ matrix.artifact }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}",
+			"path":              "dist/*",
+			"if-no-files-found": "error",
+			"compression-level": 0,
+		},
+	})
+
+	jobs := map[string]Job{
+		"build": {
+			Name:   "Build ${{ matrix.artifact }} (${{ matrix.os }}-${{ matrix.arch }})",
+			RunsOn: "${{ matrix.runs_on }}",
+			Strategy: &Strategy{
+				FailFast: false,
+				Matrix:   map[string]any{"include": include},
+			},
+			Steps: buildSteps,
+		},
+		"release": {
+			Name:   "Release Artifacts",
+			Needs:  []string{"build"},
+			RunsOn: "ubuntu-latest",
+			If:     "startsWith(github.ref, 'refs/tags/')",
+			Steps: []Step{
+				{
+					Name: "Download",
+					Uses: "actions/download-artifact@v8",
+					With: map[string]any{
+						"path":           "./artifacts",
+						"merge-multiple": true,
+					},
+				},
+				{
+					Name: "Publish",
+					Uses: "softprops/action-gh-release@v3",
+					With: map[string]any{
+						"files":                   "./artifacts/*",
+						"fail_on_unmatched_files": true,
+					},
+					Env: map[string]string{
+						"GITHUB_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
+					},
+				},
+			},
+		},
+	}
+
 	wf := Workflow{
 		Name: "Refinery Build",
 		On: On{
 			Push: &Event{Tags: []string{"v*"}},
-		},
-		Jobs: map[string]Job{
-			"build": {
-				RunsOn: "${{ matrix.runs_on }}",
-				Strategy: &Strategy{
-					FailFast: false,
-					Matrix:   map[string]any{"include": include},
-				},
-				Steps: steps,
+			Release: map[string]any{
+				"types": []string{"created"},
 			},
 		},
+		Permissions: map[string]string{
+			"contents": "write",
+			"packages": "write",
+		},
+		Jobs: jobs,
 	}
 
 	return yaml.Marshal(wf)

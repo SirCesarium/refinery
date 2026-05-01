@@ -26,7 +26,13 @@ var migrateCmd = &cobra.Command{
 		var provider pipeline.CIProvider
 		switch providerName {
 		case "github":
-			provider = github.NewProvider("refinery-build")
+			// Ahora manejamos el error que devuelve NewProvider
+			p, err := github.NewProvider("refinery-build")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error initializing provider: %v\n", err)
+				os.Exit(1)
+			}
+			provider = p
 		default:
 			fmt.Fprintf(os.Stderr, "Unsupported provider: %s\n", providerName)
 			os.Exit(1)
@@ -40,8 +46,15 @@ var migrateCmd = &cobra.Command{
 		}
 
 		outputPath := gen.Filename()
-		os.MkdirAll(filepath.Dir(outputPath), 0755)
-		os.WriteFile(outputPath, data, 0644)
+		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating directories: %v\n", err)
+			os.Exit(1)
+		}
+
+		if err := os.WriteFile(outputPath, data, 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing file: %v\n", err)
+			os.Exit(1)
+		}
 
 		fmt.Printf("Workflow generated: %s\n", outputPath)
 	},
