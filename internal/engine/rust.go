@@ -67,6 +67,41 @@ func (e *RustEngine) Validate(cfg *config.Config) error {
 		if !found {
 			return fmt.Errorf("artifact mismatch: '%s' (type %s) defined in refinery.toml not found in Cargo.toml", name, art.Type)
 		}
+
+		for tID, tCfg := range art.Targets {
+			for _, arch := range tCfg.Archs {
+				abis := tCfg.ABIs
+				if len(abis) == 0 {
+					abis = []string{""}
+				}
+				for _, abi := range abis {
+					if err := e.validateTriple(tCfg.OS, arch, abi); err != nil {
+						return fmt.Errorf("invalid target config '%s' in artifact '%s': %w", tID, name, err)
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (e *RustEngine) validateTriple(osName, arch, abi string) error {
+	switch osName {
+	case "darwin":
+		if arch != "x86_64" && arch != "aarch64" {
+			return fmt.Errorf("unsupported architecture for macOS: %s (only x86_64 and aarch64 are supported)", arch)
+		}
+	case "windows":
+		if arch == "aarch64" && abi == "gnu" {
+			return fmt.Errorf("windows-aarch64-gnu is a Tier 3 target and not supported by standard toolchains (use msvc instead)")
+		}
+		if arch != "x86_64" && arch != "i686" && arch != "aarch64" {
+			return fmt.Errorf("unsupported architecture for Windows: %s", arch)
+		}
+	case "wasm", "wasi":
+		if arch != "wasm32" {
+			return fmt.Errorf("unsupported architecture for web: %s (must be wasm32)", arch)
+		}
 	}
 	return nil
 }
