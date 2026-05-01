@@ -16,9 +16,15 @@ func (e *RustEngine) ID() string {
 }
 
 func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions) error {
-	targetTriple := fmt.Sprintf("%s-unknown-%s", opts.Arch, opts.OS)
-	if opts.ABI != "" {
-		targetTriple = fmt.Sprintf("%s-%s", targetTriple, opts.ABI)
+	var targetTriple string
+
+	if opts.OS == "darwin" {
+		targetTriple = fmt.Sprintf("%s-apple-darwin", opts.Arch)
+	} else {
+		targetTriple = fmt.Sprintf("%s-unknown-%s", opts.Arch, opts.OS)
+		if opts.ABI != "" {
+			targetTriple = fmt.Sprintf("%s-%s", targetTriple, opts.ABI)
+		}
 	}
 
 	if runtime.GOOS == "linux" && opts.OS == "linux" {
@@ -38,8 +44,10 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	}
 
 	setupCmd := exec.Command("rustup", "target", "add", targetTriple)
+
 	setupCmd.Stdout = os.Stdout
 	setupCmd.Stderr = os.Stderr
+
 	if err := setupCmd.Run(); err != nil {
 		return fmt.Errorf("failed to add target %s: %w", targetTriple, err)
 	}
@@ -52,7 +60,9 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	}
 
 	cmd := exec.Command("cargo", args...)
+
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
 	return cmd.Run()
 }
