@@ -159,6 +159,11 @@ func (p *GithubProvider) Generate(cfg *config.Config) ([]byte, error) {
 	}
 
 	buildSteps = append(buildSteps, Step{
+		Name: "Debug: Pre-Install",
+		Run:  "env && pwd",
+	})
+
+	buildSteps = append(buildSteps, Step{
 		Name: "Install Refinery",
 		Run:  "go install github.com/SirCesarium/refinery/cmd/refinery@main",
 	})
@@ -178,6 +183,18 @@ func (p *GithubProvider) Generate(cfg *config.Config) ([]byte, error) {
 			"arch":     "${{ matrix.arch }}",
 			"abi":      "${{ matrix.abi }}",
 		},
+	})
+
+	buildSteps = append(buildSteps, Step{
+		Name: "Debug: Post-Build Tree",
+		Run:  "ls -R target/ || echo 'target/ not found'",
+		If:   "always()",
+	})
+
+	buildSteps = append(buildSteps, Step{
+		Name: "Debug: Dist Contents",
+		Run:  "ls -R dist/ || echo 'dist/ not found'",
+		If:   "always()",
 	})
 
 	buildSteps = append(buildSteps, Step{
