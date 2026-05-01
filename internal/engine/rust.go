@@ -198,9 +198,14 @@ func (e *RustEngine) setupEnvironment(art *config.ArtifactConfig, opts BuildOpti
 
 	if bestMatch != nil {
 		if linker, ok := bestMatch.LangOpts["linker"].(string); ok {
-			envKey := fmt.Sprintf("CARGO_TARGET_%s_LINKER",
-				strings.ReplaceAll(strings.ReplaceAll(strings.ToUpper(target), "-", "_"), ".", "_"))
-			os.Setenv(envKey, linker)
+			isArmLinker := strings.Contains(linker, "aarch64") || strings.Contains(linker, "arm")
+			isArmTarget := strings.Contains(opts.Arch, "aarch64") || strings.Contains(opts.Arch, "arm")
+
+			if isArmLinker == isArmTarget {
+				envKey := fmt.Sprintf("CARGO_TARGET_%s_LINKER",
+					strings.ReplaceAll(strings.ReplaceAll(strings.ToUpper(target), "-", "_"), ".", "_"))
+				os.Setenv(envKey, linker)
+			}
 		}
 		if depTarget, ok := bestMatch.LangOpts["deployment_target"].(string); ok {
 			os.Setenv("MACOSX_DEPLOYMENT_TARGET", depTarget)
