@@ -130,11 +130,22 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	srcPath := filepath.Join("target", targetTriple, "release", realSrcName)
 	distPath := filepath.Join(cfg.OutputDir, finalName)
 
+	fmt.Printf("[DEBUG] Artifact Name: %s\n", opts.ArtifactName)
+	fmt.Printf("[DEBUG] Project Name: %s\n", cfg.Project.Name)
+	fmt.Printf("[DEBUG] Source File Name: %s\n", realSrcName)
+	fmt.Printf("[DEBUG] Expected Source Path: %s\n", srcPath)
+	fmt.Printf("[DEBUG] Destination Path: %s\n", distPath)
+
 	if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
 		return err
 	}
 
 	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+		fmt.Printf("[DEBUG] Source path not found. Contents of %s:\n", filepath.Dir(srcPath))
+		files, _ := os.ReadDir(filepath.Dir(srcPath))
+		for _, f := range files {
+			fmt.Printf(" - %s\n", f.Name())
+		}
 		return fmt.Errorf("artifact not found at %s", srcPath)
 	}
 
