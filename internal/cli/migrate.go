@@ -92,7 +92,7 @@ var migrateCmd = &cobra.Command{
 						},
 						{
 							Name: "Build Artifact",
-							Uses: "./",
+							Uses: "SirCesarium/refinery@main",
 							With: map[string]any{
 								"artifact": aName,
 								"os":       "${{ matrix.os }}",
@@ -104,7 +104,7 @@ var migrateCmd = &cobra.Command{
 							Name: "Upload",
 							Uses: "actions/upload-artifact@v7",
 							With: map[string]any{
-								"name":              fmt.Sprintf("bin-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}"),
+								"name":              "bin-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}",
 								"path":              "dist/*",
 								"if-no-files-found": "error",
 								"compression-level": 0,
