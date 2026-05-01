@@ -91,6 +91,11 @@ var migrateCmd = &cobra.Command{
 							},
 						},
 						{
+							Name:  "Add GOBIN to PATH",
+							Run:   "echo \"$(go env GOPATH)/bin\" >> $GITHUB_PATH",
+							Shell: "bash",
+						},
+						{
 							Name: "Build Artifact",
 							Uses: "SirCesarium/refinery@main",
 							With: map[string]any{
