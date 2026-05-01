@@ -43,48 +43,54 @@ runs:
           BINARY_NAME="${BINARY_NAME}.exe"
         fi
 
-        VERSION="${{ inputs.version }}"
+        VERSION_INPUT="${{ inputs.version }}"
         
-        if [ "$VERSION" = "latest" ]; then
-          URL="https://github.com/SirCesarium/refinery/releases/latest/download/${BINARY_NAME}"
-          echo "Using latest release..."
+        if [ "$VERSION_INPUT" = "latest" ]; then
+          echo "Fetching latest version (including pre-releases)..."
+          VERSION=$(curl -sL https://api.github.com/repos/SirCesarium/refinery/releases | \
+            grep '"tag_name":' | \
+            sed -E 's/.*"tag_name": "([^"]+)".*/\1/' | \
+            head -n1)
+          
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not resolve latest version from GitHub API"
+            exit 1
+          fi
+          echo "Latest version resolved to $VERSION"
         else
-          # Ensure version has 'v' prefix
-          if [[ ! $VERSION =~ ^v ]]; then
-            V_PREFIX="v$VERSION"
+          if [[ ! $VERSION_INPUT =~ ^v ]]; then
+            V_PREFIX="v$VERSION_INPUT"
           else
-            V_PREFIX="$VERSION"
+            V_PREFIX="$VERSION_INPUT"
           fi
 
-          # If it's a partial version (e.g. v1 or v1.2), resolve it via API
-          # A full semantic version usually has two dots (v1.2.3)
           DOT_COUNT=$(echo "$V_PREFIX" | tr -cd '.' | wc -c)
           if [ "$DOT_COUNT" -lt 2 ]; then
             echo "Resolving semantic version for $V_PREFIX..."
-            # Fetch tags, filter by prefix, sort by version and pick the latest
-            MATCH=$(curl -s https://api.github.com/repos/SirCesarium/refinery/releases | \
+            VERSION=$(curl -sL https://api.github.com/repos/SirCesarium/refinery/releases | \
               grep '"tag_name":' | \
               sed -E 's/.*"tag_name": "([^"]+)".*/\1/' | \
               grep "^${V_PREFIX}\(\.\|$\)" | \
               sort -V | tail -n1)
             
-            if [ -n "$MATCH" ]; then
-              VERSION="$MATCH"
-              echo "Resolved to $VERSION"
-            else
+            if [ -z "$VERSION" ]; then
               echo "No matching semantic version found for $V_PREFIX, trying literal tag"
               VERSION="$V_PREFIX"
             fi
           else
             VERSION="$V_PREFIX"
           fi
-          URL="https://github.com/SirCesarium/refinery/releases/download/${VERSION}/${BINARY_NAME}"
+        fi
+
+        URL="https://github.com/SirCesarium/refinery/releases/download/${VERSION}/${BINARY_NAME}"
+        echo "Downloading Refinery $VERSION from $URL"
+        
+        if ! curl -sSLf -o refinery_bin "$URL"; then
+          echo "::error::Refinery binary download failed (404). Version '$VERSION' or artifact '$BINARY_NAME' not found in releases."
+          exit 1
         fi
         
-        echo "Downloading Refinery $VERSION from $URL"
-        curl -L -o refinery_bin "$URL"
         chmod +x refinery_bin
-        
         mkdir -p .refinery_bin
         mv refinery_bin .refinery_bin/refinery
         if [ "$R_OS" = "windows" ]; then
