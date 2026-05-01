@@ -87,11 +87,11 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 		return err
 	}
 
-	if err := e.runCargoBuild(cfg, art, opts, targetTriple, profile); err != nil {
+	if err := e.runCargoBuild(art, opts, targetTriple, profile); err != nil {
 		return err
 	}
 
-	return e.moveArtifact(cfg, art, opts, targetTriple, manifest.Package.Version, profile)
+	return e.moveArtifacts(cfg, art, opts, targetTriple, manifest.Package.Version, profile)
 }
 
 func (e *RustEngine) GetCIRequirements() []string {
@@ -136,7 +136,7 @@ func (e *RustEngine) resolveTarget(opts BuildOptions) string {
 
 func (e *RustEngine) setupEnvironment(art *config.ArtifactConfig, opts BuildOptions, target string) error {
 	for _, tCfg := range art.Targets {
-		if tCfg.OS == opts.OS {
+		if tCfg.OS == opts.OS && e.sliceContains(tCfg.Archs, opts.Arch) && (opts.ABI == "" || e.sliceContains(tCfg.ABIs, opts.ABI)) {
 			if linker, ok := tCfg.LangOpts["linker"].(string); ok {
 				envKey := fmt.Sprintf("CARGO_TARGET_%s_LINKER",
 					strings.ReplaceAll(strings.ReplaceAll(strings.ToUpper(target), "-", "_"), ".", "_"))
@@ -164,12 +164,12 @@ func (e *RustEngine) addTarget(target string) error {
 	return cmd.Run()
 }
 
-func (e *RustEngine) runCargoBuild(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, target, profile string) error {
+func (e *RustEngine) runCargoBuild(art *config.ArtifactConfig, opts BuildOptions, target, profile string) error {
 	args := []string{"build", "--target", target}
 	if profile == "release" {
 		args = append(args, "--release")
 	}
-	
+
 	if art.Type == "lib" {
 		args = append(args, "--lib")
 	} else {
@@ -183,51 +183,96 @@ func (e *RustEngine) runCargoBuild(cfg *config.Config, art *config.ArtifactConfi
 	return cmd.Run()
 }
 
-func (e *RustEngine) moveArtifact(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, target, version, profile string) error {
-	ext, prefix := e.getArtifactAttributes(opts, art.Type)
-	finalName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, version, opts.ABI, ext)
-
-	realSrcName := opts.ArtifactName
-	if prefix != "" && !strings.HasPrefix(realSrcName, prefix) {
-		realSrcName = prefix + realSrcName
-	}
-	if ext != "" {
-		realSrcName += "." + ext
+func (e *RustEngine) moveArtifacts(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, target, version, profile string) error {
+	formats := art.Formats
+	if len(formats) == 0 {
+		if art.Type == "bin" {
+			formats = []string{"bin"}
+		} else {
+			formats = []string{"cdylib"}
+		}
 	}
 
-	srcPath := filepath.Join("target", target, profile, realSrcName)
-	distPath := filepath.Join(cfg.OutputDir, finalName)
+	movedCount := 0
+	for _, f := range formats {
+		ext, prefix := e.getExtAndPrefix(opts.OS, art.Type, f)
+		finalName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, version, opts.ABI, ext)
+		realSrcName := opts.ArtifactName
 
-	if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
-		return err
+		if prefix != "" && !strings.HasPrefix(realSrcName, prefix) {
+			realSrcName = prefix + realSrcName
+		}
+		if ext != "" {
+			realSrcName += "." + ext
+		}
+
+		srcPath := filepath.Join("target", target, profile, realSrcName)
+		distPath := filepath.Join(cfg.OutputDir, finalName)
+
+		if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
+			return err
+		}
+
+		if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+			continue
+		}
+
+		if err := os.Rename(srcPath, distPath); err != nil {
+			return err
+		}
+		movedCount++
 	}
 
-	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-		return fmt.Errorf("artifact not found at %s", srcPath)
+	if movedCount == 0 {
+		return fmt.Errorf("no artifacts found for %s in %s", opts.ArtifactName, target)
 	}
-
-	return os.Rename(srcPath, distPath)
+	return nil
 }
 
-func (e *RustEngine) getArtifactAttributes(opts BuildOptions, artType string) (string, string) {
+func (e *RustEngine) getExtAndPrefix(osName, artType, format string) (string, string) {
 	var ext, prefix string
-	switch opts.OS {
-	case "windows":
-		if artType == "bin" {
-			ext = "exe"
-		} else {
-			ext = "dll"
-		}
-	case "wasm", "wasi":
-		ext = "wasm"
-	case "linux", "darwin":
-		if artType == "lib" {
-			prefix = "lib"
-			ext = "so"
-			if opts.OS == "darwin" {
+	if artType == "lib" {
+		prefix = "lib"
+		switch osName {
+		case "windows":
+			prefix = ""
+			if format == "staticlib" {
+				ext = "lib"
+			} else {
+				ext = "dll"
+			}
+		case "darwin":
+			if format == "staticlib" {
+				ext = "a"
+			} else {
 				ext = "dylib"
 			}
+		case "wasm", "wasi":
+			prefix = ""
+			ext = "wasm"
+		default:
+			if format == "staticlib" {
+				ext = "a"
+			} else {
+				ext = "so"
+			}
+		}
+	} else {
+		switch osName {
+		case "windows":
+			ext = "exe"
+		case "wasm", "wasi":
+			ext = "wasm"
 		}
 	}
 	return ext, prefix
+}
+
+func (e *RustEngine) sliceContains(slice []string, val string) bool {
+	for _, item := range slice {
+		if item == val {
+			return true
+		}
+	}
+	return false
 }
