@@ -78,6 +78,7 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 		return err
 	}
 
+	profile := "release"
 	if err := e.setupEnvironment(art, opts, targetTriple); err != nil {
 		return err
 	}
@@ -86,11 +87,11 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 		return err
 	}
 
-	if err := e.runCargoBuild(cfg, art, opts, targetTriple); err != nil {
+	if err := e.runCargoBuild(cfg, art, opts, targetTriple, profile); err != nil {
 		return err
 	}
 
-	return e.moveArtifact(cfg, art, opts, targetTriple, manifest.Package.Version)
+	return e.moveArtifact(cfg, art, opts, targetTriple, manifest.Package.Version, profile)
 }
 
 func (e *RustEngine) GetCIRequirements() []string {
@@ -134,8 +135,8 @@ func (e *RustEngine) resolveTarget(opts BuildOptions) string {
 }
 
 func (e *RustEngine) setupEnvironment(art *config.ArtifactConfig, opts BuildOptions, target string) error {
-	for tName, tCfg := range art.Targets {
-		if tName == opts.OS {
+	for _, tCfg := range art.Targets {
+		if tCfg.OS == opts.OS {
 			if linker, ok := tCfg.LangOpts["linker"].(string); ok {
 				envKey := fmt.Sprintf("CARGO_TARGET_%s_LINKER",
 					strings.ReplaceAll(strings.ReplaceAll(strings.ToUpper(target), "-", "_"), ".", "_"))
@@ -163,9 +164,11 @@ func (e *RustEngine) addTarget(target string) error {
 	return cmd.Run()
 }
 
-func (e *RustEngine) runCargoBuild(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, target string) error {
-	profile := "release"
-	args := []string{"build", "--" + profile, "--target", target}
+func (e *RustEngine) runCargoBuild(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, target, profile string) error {
+	args := []string{"build", "--target", target}
+	if profile == "release" {
+		args = append(args, "--release")
+	}
 	
 	if art.Type == "lib" {
 		args = append(args, "--lib")
@@ -180,7 +183,7 @@ func (e *RustEngine) runCargoBuild(cfg *config.Config, art *config.ArtifactConfi
 	return cmd.Run()
 }
 
-func (e *RustEngine) moveArtifact(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, target, version string) error {
+func (e *RustEngine) moveArtifact(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, target, version, profile string) error {
 	ext, prefix := e.getArtifactAttributes(opts, art.Type)
 	finalName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, version, opts.ABI, ext)
 
@@ -192,7 +195,7 @@ func (e *RustEngine) moveArtifact(cfg *config.Config, art *config.ArtifactConfig
 		realSrcName += "." + ext
 	}
 
-	srcPath := filepath.Join("target", target, "release", realSrcName)
+	srcPath := filepath.Join("target", target, profile, realSrcName)
 	distPath := filepath.Join(cfg.OutputDir, finalName)
 
 	if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {

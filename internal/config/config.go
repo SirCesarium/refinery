@@ -33,6 +33,7 @@ type ArtifactConfig struct {
 }
 
 type TargetConfig struct {
+	OS       string         `toml:"os" mapstructure:"os"`
 	Archs    []string       `toml:"archs" mapstructure:"archs"`
 	ABIs     []string       `toml:"abis,omitempty" mapstructure:"abis"`
 	Packages []string       `toml:"packages" mapstructure:"packages"`
@@ -75,9 +76,12 @@ func (c *Config) Validate() error {
 		if len(art.Targets) == 0 {
 			return fmt.Errorf("artifact %s must have at least one target", name)
 		}
-		for tName, tCfg := range art.Targets {
+		for tID, tCfg := range art.Targets {
+			if tCfg.OS == "" {
+				return fmt.Errorf("target %s in artifact %s must have an 'os' field", tID, name)
+			}
 			if len(tCfg.Archs) == 0 {
-				return fmt.Errorf("target %s in artifact %s must have at least one arch", tName, name)
+				return fmt.Errorf("target %s in artifact %s must have at least one arch", tID, name)
 			}
 		}
 	}
@@ -157,10 +161,13 @@ func Load(path string) (*Config, error) {
 
 	for _, art := range cfg.Artifacts {
 		for tName, tCfg := range art.Targets {
+			if tCfg.OS == "" {
+				tCfg.OS = tName
+			}
 			if len(tCfg.ABIs) == 0 {
 				tCfg.ABIs = []string{""}
-				art.Targets[tName] = tCfg
 			}
+			art.Targets[tName] = tCfg
 		}
 	}
 

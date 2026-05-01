@@ -85,9 +85,9 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 
 	for _, aName := range artifactNames {
 		art := cfg.Artifacts[aName]
-		for osName, tCfg := range art.Targets {
+		for _, tCfg := range art.Targets {
 			runsOn := "ubuntu-latest"
-			switch osName {
+			switch tCfg.OS {
 			case "windows":
 				runsOn = "windows-latest"
 			case "darwin":
@@ -96,12 +96,8 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 
 			for _, arch := range tCfg.Archs {
 				abis := tCfg.ABIs
-				if len(abis) == 0 {
-					abis = []string{""}
-				}
-
 				for _, abi := range abis {
-					key := fmt.Sprintf("%s-%s-%s-%s", aName, osName, arch, abi)
+					key := fmt.Sprintf("%s-%s-%s-%s", aName, tCfg.OS, arch, abi)
 					if uniqueMatrix[key] {
 						continue
 					}
@@ -109,7 +105,7 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 
 					m := map[string]any{
 						"artifact": aName,
-						"os":       osName,
+						"os":       tCfg.OS,
 						"arch":     arch,
 						"runs_on":  runsOn,
 					}
