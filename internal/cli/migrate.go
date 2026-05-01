@@ -80,7 +80,7 @@ var migrateCmd = &cobra.Command{
 						},
 						{
 							Name: "Install Refinery",
-							Run:  "go install github.com/SirCesarium/refinery@main",
+							Run:  "go install github.com/SirCesarium/refinery/cmd/refinery@main",
 						},
 						{
 							Name:  "Build",
