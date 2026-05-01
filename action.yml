@@ -15,6 +15,10 @@ inputs:
     description: Target ABI
     required: false
     default: ""
+  version:
+    description: Version of refinery to use (e.g. 1, 1.2, v1.0.0 or latest)
+    required: false
+    default: "latest"
 
 runs:
   using: "composite"
@@ -22,7 +26,6 @@ runs:
     - name: Download Refinery Binary
       shell: bash
       run: |
-        # Map runner architecture to refinery binary naming
         R_OS="linux"
         if [ "${{ runner.os }}" = "macOS" ]; then
           R_OS="darwin"
@@ -40,13 +43,48 @@ runs:
           BINARY_NAME="${BINARY_NAME}.exe"
         fi
 
-        URL="https://github.com/SirCesarium/refinery/releases/latest/download/${BINARY_NAME}"
+        VERSION="${{ inputs.version }}"
         
-        echo "Downloading Refinery from $URL"
+        if [ "$VERSION" = "latest" ]; then
+          URL="https://github.com/SirCesarium/refinery/releases/latest/download/${BINARY_NAME}"
+          echo "Using latest release..."
+        else
+          # Ensure version has 'v' prefix
+          if [[ ! $VERSION =~ ^v ]]; then
+            V_PREFIX="v$VERSION"
+          else
+            V_PREFIX="$VERSION"
+          fi
+
+          # If it's a partial version (e.g. v1 or v1.2), resolve it via API
+          # A full semantic version usually has two dots (v1.2.3)
+          DOT_COUNT=$(echo "$V_PREFIX" | tr -cd '.' | wc -c)
+          if [ "$DOT_COUNT" -lt 2 ]; then
+            echo "Resolving semantic version for $V_PREFIX..."
+            # Fetch tags, filter by prefix, sort by version and pick the latest
+            MATCH=$(curl -s https://api.github.com/repos/SirCesarium/refinery/releases | \
+              grep '"tag_name":' | \
+              sed -E 's/.*"tag_name": "([^"]+)".*/\1/' | \
+              grep "^${V_PREFIX}\(\.\|$\)" | \
+              sort -V | tail -n1)
+            
+            if [ -n "$MATCH" ]; then
+              VERSION="$MATCH"
+              echo "Resolved to $VERSION"
+            else
+              echo "No matching semantic version found for $V_PREFIX, trying literal tag"
+              VERSION="$V_PREFIX"
+            fi
+          else
+            VERSION="$V_PREFIX"
+          fi
+          URL="https://github.com/SirCesarium/refinery/releases/download/${VERSION}/${BINARY_NAME}"
+        fi
+        
+        echo "Downloading Refinery $VERSION from $URL"
         curl -L -o refinery_bin "$URL"
         chmod +x refinery_bin
         
-        # Add to path
         mkdir -p .refinery_bin
         mv refinery_bin .refinery_bin/refinery
         if [ "$R_OS" = "windows" ]; then

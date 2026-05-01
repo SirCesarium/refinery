@@ -153,6 +153,7 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 			"os":       "${{ matrix.os }}",
 			"arch":     "${{ matrix.arch }}",
 			"abi":      "${{ matrix.abi }}",
+			"version":  cfg.RefineryVersion,
 		},
 	})
 
