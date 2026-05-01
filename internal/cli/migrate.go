@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/SirCesarium/refinery/internal/config"
 	"github.com/SirCesarium/refinery/internal/pipeline"
@@ -36,14 +37,16 @@ var migrateCmd = &cobra.Command{
 		var provider pipeline.CIProvider
 		switch providerName {
 		case "github":
-			jobs := make(map[string]github.Job)
-			var buildJobNames []string
+			var artifactNames []string
+			for name := range cfg.Artifacts {
+				artifactNames = append(artifactNames, name)
+			}
+			sort.Strings(artifactNames)
 
-			for aName, art := range cfg.Artifacts {
-				jobID := "build-" + aName
-				buildJobNames = append(buildJobNames, jobID)
-				var include []map[string]any
+			var include []map[string]any
+			seenTargets := make(map[string]bool)
 
+			for _, art := range cfg.Artifacts {
 				for tName, tCfg := range art.Targets {
 					runsOn := "ubuntu-latest"
 					switch tName {
@@ -55,6 +58,12 @@ var migrateCmd = &cobra.Command{
 
 					for _, targetArch := range tCfg.Archs {
 						for _, targetAbi := range tCfg.ABIs {
+							targetKey := fmt.Sprintf("%s-%s-%s", tName, targetArch, targetAbi)
+							if seenTargets[targetKey] {
+								continue
+							}
+							seenTargets[targetKey] = true
+
 							m := map[string]any{
 								"os":      tName,
 								"arch":    targetArch,
@@ -67,71 +76,73 @@ var migrateCmd = &cobra.Command{
 						}
 					}
 				}
+			}
 
-				jobs[jobID] = github.Job{
-					Name:   "Build " + aName,
-					RunsOn: "${{ matrix.runs_on }}",
-					Strategy: &github.Strategy{
-						FailFast: true,
-						Matrix: map[string]any{
-							"include": include,
+			jobs := make(map[string]github.Job)
+			jobs["build"] = github.Job{
+				Name:   "Build ${{ matrix.artifact }} (${{ matrix.os }}-${{ matrix.arch }})",
+				RunsOn: "${{ matrix.runs_on }}",
+				Strategy: &github.Strategy{
+					FailFast: true,
+					Matrix: map[string]any{
+						"artifact": artifactNames,
+						"include":  include,
+					},
+				},
+				Steps: []github.Step{
+					{
+						Name: "Checkout",
+						Uses: ActionCheckout,
+					},
+					{
+						Name: "Setup Go",
+						Uses: ActionSetupGo,
+						With: map[string]any{"go-version": "stable", "cache": true},
+					},
+					{
+						Name: "Setup Rust",
+						Uses: ActionSetupRust,
+						With: map[string]any{"cache": true},
+					},
+					{
+						Name: "Install Refinery",
+						Run:  "go install github.com/SirCesarium/refinery/cmd/refinery@main",
+						Env: map[string]string{
+							"GOPROXY":   "https://proxy.golang.org,direct",
+							"GOPRIVATE": "github.com/SirCesarium/*",
 						},
 					},
-					Steps: []github.Step{
-						{
-							Name: "Checkout",
-							Uses: ActionCheckout,
-						},
-						{
-							Name: "Setup Go",
-							Uses: ActionSetupGo,
-							With: map[string]any{"go-version": "stable", "cache": true},
-						},
-						{
-							Name: "Setup Rust",
-							Uses: ActionSetupRust,
-							With: map[string]any{"cache": true},
-						},
-						{
-							Name: "Install Refinery",
-							Run:  "go install github.com/SirCesarium/refinery/cmd/refinery@main",
-							Env: map[string]string{
-								"GOPROXY":   "https://proxy.golang.org,direct",
-								"GOPRIVATE": "github.com/SirCesarium/*",
-							},
-						},
-						{
-							Name:  "Add GOBIN to PATH",
-							Run:   "echo \"$(go env GOPATH)/bin\" >> $GITHUB_PATH",
-							Shell: "bash",
-						},
-						{
-							Name: "Build Artifact",
-							Uses: RefineryAction,
-							With: map[string]any{
-								"artifact": aName,
-								"os":       "${{ matrix.os }}",
-								"arch":     "${{ matrix.arch }}",
-								"abi":      "${{ matrix.abi }}",
-							},
-						},
-						{
-							Name: "Upload",
-							Uses: ActionUpload,
-							With: map[string]any{
-								"name":              fmt.Sprintf("bin-%s-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}", aName),
-								"path":              "dist/*",
-								"if-no-files-found": "error",
-								"compression-level": 0,
-							},
+					{
+						Name:  "Add GOBIN to PATH",
+						Run:   "echo \"$(go env GOPATH)/bin\" >> $GITHUB_PATH",
+						Shell: "bash",
+					},
+					{
+						Name: "Build Artifact",
+						Uses: RefineryAction,
+						With: map[string]any{
+							"artifact": "${{ matrix.artifact }}",
+							"os":       "${{ matrix.os }}",
+							"arch":     "${{ matrix.arch }}",
+							"abi":      "${{ matrix.abi }}",
 						},
 					},
-				}
+					{
+						Name: "Upload",
+						Uses: ActionUpload,
+						With: map[string]any{
+							"name":              "bin-${{ matrix.artifact }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}",
+							"path":              "dist/*",
+							"if-no-files-found": "error",
+							"compression-level": 0,
+						},
+					},
+				},
 			}
 
 			jobs["release"] = github.Job{
 				Name:   "Release Artifacts",
-				Needs:  buildJobNames,
+				Needs:  []string{"build"},
 				RunsOn: "ubuntu-latest",
 				If:     "startsWith(github.ref, 'refs/tags/')",
 				Steps: []github.Step{
