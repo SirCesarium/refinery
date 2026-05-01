@@ -26,76 +26,54 @@ runs:
     - name: Download Refinery Binary
       shell: bash
       run: |
-        R_OS="linux"
-        if [ "${{ runner.os }}" = "macOS" ]; then
-          R_OS="darwin"
-        elif [ "${{ runner.os }}" = "Windows" ]; then
-          R_OS="windows"
-        fi
+        case "${{ runner.os }}" in
+          Linux) R_OS="linux" ;;
+          macOS) R_OS="darwin" ;;
+          Windows) R_OS="windows" ;;
+          *) exit 1 ;;
+        esac
 
-        R_ARCH="amd64"
-        if [ "${{ runner.arch }}" = "ARM64" ]; then
-          R_ARCH="arm64"
-        fi
+        case "${{ runner.arch }}" in
+          X64) R_ARCH="amd64" ;;
+          ARM64) R_ARCH="arm64" ;;
+          *) exit 1 ;;
+        esac
 
         BINARY_NAME="refinery-${R_OS}-${R_ARCH}"
-        if [ "$R_OS" = "windows" ]; then
-          BINARY_NAME="${BINARY_NAME}.exe"
-        fi
+        [ "$R_OS" = "windows" ] && BINARY_NAME="${BINARY_NAME}.exe"
 
-        VERSION_INPUT="${{ inputs.version }}"
-        
-        if [ "$VERSION_INPUT" = "latest" ]; then
-          echo "Fetching latest version (including pre-releases)..."
-          VERSION=$(curl -sL https://api.github.com/repos/SirCesarium/refinery/releases | \
-            grep '"tag_name":' | \
-            sed -E 's/.*"tag_name": "([^"]+)".*/\1/' | \
-            head -n1)
-          
-          if [ -z "$VERSION" ]; then
-            echo "::error::Could not resolve latest version from GitHub API"
-            exit 1
-          fi
-          echo "Latest version resolved to $VERSION"
+        RELEASES_JSON=$(curl -sL -H "Accept: application/vnd.github+json" https://api.github.com/repos/SirCesarium/refinery/releases)
+        V_INPUT="${{ inputs.version }}"
+
+        if [ "$V_INPUT" = "latest" ]; then
+          VERSION=$(echo "$RELEASES_JSON" | grep '"tag_name":' | head -n1 | cut -d'"' -f4)
         else
-          if [[ ! $VERSION_INPUT =~ ^v ]]; then
-            V_PREFIX="v$VERSION_INPUT"
-          else
-            V_PREFIX="$VERSION_INPUT"
-          fi
+          [[ ! "$V_INPUT" =~ ^v ]] && V_SEARCH="v$V_INPUT" || V_SEARCH="$V_INPUT"
+          DOT_COUNT=$(echo "$V_SEARCH" | tr -cd '.' | wc -c)
 
-          DOT_COUNT=$(echo "$V_PREFIX" | tr -cd '.' | wc -c)
           if [ "$DOT_COUNT" -lt 2 ]; then
-            echo "Resolving semantic version for $V_PREFIX..."
-            VERSION=$(curl -sL https://api.github.com/repos/SirCesarium/refinery/releases | \
-              grep '"tag_name":' | \
-              sed -E 's/.*"tag_name": "([^"]+)".*/\1/' | \
-              grep "^${V_PREFIX}\(\.\|$\)" | \
-              sort -V | tail -n1)
-            
-            if [ -z "$VERSION" ]; then
-              echo "No matching semantic version found for $V_PREFIX, trying literal tag"
-              VERSION="$V_PREFIX"
-            fi
+            VERSION=$(echo "$RELEASES_JSON" | cut -d'"' -f4 | grep -E "^${V_SEARCH}(\.|$)" | sort -Vr | head -n1)
+            [ -z "$VERSION" ] && VERSION="$V_SEARCH"
           else
-            VERSION="$V_PREFIX"
+            VERSION="$V_SEARCH"
           fi
         fi
 
         URL="https://github.com/SirCesarium/refinery/releases/download/${VERSION}/${BINARY_NAME}"
-        echo "Downloading Refinery $VERSION from $URL"
-        
-        if ! curl -sSLf -o refinery_bin "$URL"; then
-          echo "::error::Refinery binary download failed (404). Version '$VERSION' or artifact '$BINARY_NAME' not found in releases."
+
+        mkdir -p .refinery_bin
+        if ! curl -sSLf -o ".refinery_bin/refinery_raw" "$URL"; then
+          echo "::error::Download failed: $URL"
           exit 1
         fi
-        
-        chmod +x refinery_bin
-        mkdir -p .refinery_bin
-        mv refinery_bin .refinery_bin/refinery
+
+        chmod +x ".refinery_bin/refinery_raw"
         if [ "$R_OS" = "windows" ]; then
-           mv .refinery_bin/refinery .refinery_bin/refinery.exe
+          mv ".refinery_bin/refinery_raw" ".refinery_bin/refinery.exe"
+        else
+          mv ".refinery_bin/refinery_raw" ".refinery_bin/refinery"
         fi
+
         echo "$(pwd)/.refinery_bin" >> $GITHUB_PATH
 
     - name: Clean dist
@@ -106,9 +84,7 @@ runs:
       shell: bash
       run: |
         FLAGS="--artifact ${{ inputs.artifact }} --os ${{ inputs.os }} --arch ${{ inputs.arch }}"
-        if [ -n "${{ inputs.abi }}" ]; then
-          FLAGS="$FLAGS --abi ${{ inputs.abi }}"
-        fi
+        [ -n "${{ inputs.abi }}" ] && FLAGS="$FLAGS --abi ${{ inputs.abi }}"
         refinery build $FLAGS
 
     - name: List distribution
