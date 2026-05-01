@@ -44,33 +44,40 @@ var migrateCmd = &cobra.Command{
 			sort.Strings(artifactNames)
 
 			var include []map[string]any
-			seenTargets := make(map[string]bool)
+			uniqueMatrix := make(map[string]bool)
 
-			for _, art := range cfg.Artifacts {
-				for tName, tCfg := range art.Targets {
+			for _, aName := range artifactNames {
+				art := cfg.Artifacts[aName]
+				for osName, tCfg := range art.Targets {
 					runsOn := "ubuntu-latest"
-					switch tName {
+					switch osName {
 					case "windows":
 						runsOn = "windows-latest"
 					case "darwin":
 						runsOn = "macos-latest"
 					}
 
-					for _, targetArch := range tCfg.Archs {
-						for _, targetAbi := range tCfg.ABIs {
-							targetKey := fmt.Sprintf("%s-%s-%s", tName, targetArch, targetAbi)
-							if seenTargets[targetKey] {
+					for _, arch := range tCfg.Archs {
+						abis := tCfg.ABIs
+						if len(abis) == 0 {
+							abis = []string{""}
+						}
+
+						for _, abi := range abis {
+							key := fmt.Sprintf("%s-%s-%s-%s", aName, osName, arch, abi)
+							if uniqueMatrix[key] {
 								continue
 							}
-							seenTargets[targetKey] = true
+							uniqueMatrix[key] = true
 
 							m := map[string]any{
-								"os":      tName,
-								"arch":    targetArch,
-								"runs_on": runsOn,
+								"artifact": aName,
+								"os":       osName,
+								"arch":     arch,
+								"runs_on":  runsOn,
 							}
-							if targetAbi != "" {
-								m["abi"] = targetAbi
+							if abi != "" {
+								m["abi"] = abi
 							}
 							include = append(include, m)
 						}
@@ -80,13 +87,12 @@ var migrateCmd = &cobra.Command{
 
 			jobs := make(map[string]github.Job)
 			jobs["build"] = github.Job{
-				Name:   "Build ${{ matrix.artifact }} (${{ matrix.os }}-${{ matrix.arch }})",
+				Name:   "Build ${{ matrix.artifact }} (${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }})",
 				RunsOn: "${{ matrix.runs_on }}",
 				Strategy: &github.Strategy{
-					FailFast: true,
+					FailFast: false,
 					Matrix: map[string]any{
-						"artifact": artifactNames,
-						"include":  include,
+						"include": include,
 					},
 				},
 				Steps: []github.Step{
