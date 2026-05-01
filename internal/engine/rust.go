@@ -79,11 +79,7 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 
 	if art.Type == "lib" {
 		args = append(args, "--lib")
-		if opts.ArtifactName == "tt_web" || opts.ArtifactName == "tt_core" {
-			srcFileName = "tt_core"
-		} else {
-			srcFileName = strings.ReplaceAll(cfg.Project.Name, "-", "_")
-		}
+		srcFileName = strings.ReplaceAll(cfg.Project.Name, "-", "_")
 	} else {
 		args = append(args, "--bin", opts.ArtifactName)
 		srcFileName = opts.ArtifactName
@@ -139,7 +135,7 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	}
 
 	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-		return fmt.Errorf("artifact not found at %s. Check if [lib] name in Cargo.toml matches project name", srcPath)
+		return fmt.Errorf("artifact not found at %s", srcPath)
 	}
 
 	return os.Rename(srcPath, distPath)

@@ -19,13 +19,19 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Clean dist
+      shell: bash
+      run: rm -rf dist/ && mkdir -p dist/
+
     - name: Run refinery build
       shell: bash
       run: |
-        ABI_FLAG=""
-        if [ -n "${{ inputs.abi }}" ]; then ABI_FLAG="--abi ${{ inputs.abi }}"; fi
-        refinery build --artifact ${{ inputs.artifact }} --os ${{ inputs.os }} --arch ${{ inputs.arch }} $ABI_FLAG
+        FLAGS="--artifact ${{ inputs.artifact }} --os ${{ inputs.os }} --arch ${{ inputs.arch }}"
+        if [ -n "${{ inputs.abi }}" ]; then
+          FLAGS="$FLAGS --abi ${{ inputs.abi }}"
+        fi
+        refinery build $FLAGS
+
     - name: List distribution
       shell: bash
-      run: |
-        ls -R dist/
+      run: ls -R dist/

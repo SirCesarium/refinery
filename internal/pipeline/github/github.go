@@ -10,6 +10,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	ActionCheckout         = "actions/checkout@v6"
+	ActionSetupGo          = "actions/setup-go@v6"
+	ActionUploadArtifact   = "actions/upload-artifact@v7"
+	ActionDownloadArtifact = "actions/download-artifact@v8"
+	ActionGHRelease        = "softprops/action-gh-release@v3"
+	ActionRustToolchain    = "actions-rust-lang/setup-rust-toolchain@v1"
+)
+
 type Workflow struct {
 	Name        string            `yaml:"name"`
 	On          On                `yaml:"on"`
@@ -70,11 +79,11 @@ func (p *GithubProvider) GetSetupSteps(lang string) []pipeline.Step {
 	switch lang {
 	case "rust":
 		return []pipeline.Step{
-			{Name: "Setup Rust", Run: "actions-rust-lang/setup-rust-toolchain@v1"},
+			{Name: "Setup Rust", Run: ActionRustToolchain},
 		}
 	case "go":
 		return []pipeline.Step{
-			{Name: "Setup Go", Run: "actions/setup-go@v6"},
+			{Name: "Setup Go", Run: ActionSetupGo},
 		}
 	default:
 		return nil
@@ -131,25 +140,23 @@ func (p *GithubProvider) Generate(cfg *config.Config) ([]byte, error) {
 	}
 
 	buildSteps := []Step{
-		{Name: "Checkout", Uses: "actions/checkout@v6"},
+		{Name: "Checkout", Uses: ActionCheckout},
 		{
 			Name: "Setup Go",
-			Uses: "actions/setup-go@v6",
+			Uses: ActionSetupGo,
 			With: map[string]any{"go-version": "stable", "cache": true},
 		},
 	}
 
 	for _, s := range p.GetSetupSteps(cfg.Project.Lang) {
 		if s.Run != "" && s.Name != "Setup Go" {
-			buildSteps = append(buildSteps, Step{Name: s.Name, Uses: s.Run, With: map[string]any{"cache": true}})
+			buildSteps = append(buildSteps, Step{
+				Name: s.Name,
+				Uses: s.Run,
+				With: map[string]any{"cache": true},
+			})
 		}
 	}
-
-	buildSteps = append(buildSteps, Step{
-		Name: "Install WASM Tools",
-		If:   "matrix.os == 'wasm' || matrix.os == 'wasi'",
-		Run:  "curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh",
-	})
 
 	buildSteps = append(buildSteps, Step{
 		Name: "Install Refinery",
@@ -175,7 +182,7 @@ func (p *GithubProvider) Generate(cfg *config.Config) ([]byte, error) {
 
 	buildSteps = append(buildSteps, Step{
 		Name: "Upload",
-		Uses: "actions/upload-artifact@v7",
+		Uses: ActionUploadArtifact,
 		With: map[string]any{
 			"name":              "bin-${{ matrix.artifact }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}",
 			"path":              "dist/*",
@@ -202,7 +209,7 @@ func (p *GithubProvider) Generate(cfg *config.Config) ([]byte, error) {
 			Steps: []Step{
 				{
 					Name: "Download",
-					Uses: "actions/download-artifact@v8",
+					Uses: ActionDownloadArtifact,
 					With: map[string]any{
 						"path":           "./artifacts",
 						"merge-multiple": true,
@@ -210,7 +217,7 @@ func (p *GithubProvider) Generate(cfg *config.Config) ([]byte, error) {
 				},
 				{
 					Name: "Publish",
-					Uses: "softprops/action-gh-release@v3",
+					Uses: ActionGHRelease,
 					With: map[string]any{
 						"files":                   "./artifacts/*",
 						"fail_on_unmatched_files": true,
