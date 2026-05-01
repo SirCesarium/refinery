@@ -93,7 +93,12 @@ var migrateCmd = &cobra.Command{
 			wf := github.Workflow{
 				Name: "Refinery Build Pipeline",
 				On: github.On{
-					Push: &github.Event{Branches: []string{"main"}},
+					Push: &github.Event{
+						Tags: []string{"v*"},
+					},
+					Release: map[string]any{
+						"types": []string{"created"},
+					},
 				},
 				Jobs: jobs,
 			}
