@@ -94,8 +94,19 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	return e.moveArtifacts(cfg, art, opts, targetTriple, manifest.Package.Version, profile)
 }
 
-func (e *RustEngine) GetCIRequirements() []string {
-	return []string{"rust"}
+func (e *RustEngine) GetCIRequirements(cfg *config.Config) []string {
+	reqs := []string{"rust"}
+	for _, art := range cfg.Artifacts {
+		for _, tCfg := range art.Targets {
+			if tCfg.OS == "linux" && e.sliceContains(tCfg.Archs, "aarch64") {
+				reqs = append(reqs, "cross-linker:linux-aarch64")
+			}
+			if e.sliceContains(tCfg.ABIs, "musl") {
+				reqs = append(reqs, "pkg:musl-tools")
+			}
+		}
+	}
+	return reqs
 }
 
 func (e *RustEngine) loadManifest() (*cargoManifest, error) {
@@ -135,19 +146,32 @@ func (e *RustEngine) resolveTarget(opts BuildOptions) string {
 }
 
 func (e *RustEngine) setupEnvironment(art *config.ArtifactConfig, opts BuildOptions, target string) error {
+	var bestMatch *config.TargetConfig
 	for _, tCfg := range art.Targets {
-		if tCfg.OS == opts.OS && e.sliceContains(tCfg.Archs, opts.Arch) && (opts.ABI == "" || e.sliceContains(tCfg.ABIs, opts.ABI)) {
-			if linker, ok := tCfg.LangOpts["linker"].(string); ok {
-				envKey := fmt.Sprintf("CARGO_TARGET_%s_LINKER",
-					strings.ReplaceAll(strings.ReplaceAll(strings.ToUpper(target), "-", "_"), ".", "_"))
-				os.Setenv(envKey, linker)
+		if tCfg.OS == opts.OS && e.sliceContains(tCfg.Archs, opts.Arch) {
+			if opts.ABI != "" && e.sliceContains(tCfg.ABIs, opts.ABI) {
+				targetCopy := tCfg
+				bestMatch = &targetCopy
+				break
 			}
-			if depTarget, ok := tCfg.LangOpts["deployment_target"].(string); ok {
-				os.Setenv("MACOSX_DEPLOYMENT_TARGET", depTarget)
+			if opts.ABI == "" {
+				targetCopy := tCfg
+				bestMatch = &targetCopy
 			}
-			if sdk, ok := tCfg.LangOpts["sdk_root"].(string); ok {
-				os.Setenv("SDKROOT", sdk)
-			}
+		}
+	}
+
+	if bestMatch != nil {
+		if linker, ok := bestMatch.LangOpts["linker"].(string); ok {
+			envKey := fmt.Sprintf("CARGO_TARGET_%s_LINKER",
+				strings.ReplaceAll(strings.ReplaceAll(strings.ToUpper(target), "-", "_"), ".", "_"))
+			os.Setenv(envKey, linker)
+		}
+		if depTarget, ok := bestMatch.LangOpts["deployment_target"].(string); ok {
+			os.Setenv("MACOSX_DEPLOYMENT_TARGET", depTarget)
+		}
+		if sdk, ok := bestMatch.LangOpts["sdk_root"].(string); ok {
+			os.Setenv("SDKROOT", sdk)
 		}
 	}
 

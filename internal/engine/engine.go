@@ -23,7 +23,7 @@ type BuildEngine interface {
 	Prepare(cfg *config.Config) error
 	Validate(cfg *config.Config) error
 	Build(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions) error
-	GetCIRequirements() []string
+	GetCIRequirements(cfg *config.Config) []string
 }
 
 type EngineRegistry struct {

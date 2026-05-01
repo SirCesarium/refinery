@@ -127,13 +127,23 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 		},
 	}
 
-	for _, req := range eng.GetCIRequirements() {
-		switch req {
-		case "rust":
+	for _, req := range eng.GetCIRequirements(cfg) {
+		switch {
+		case req == "rust":
 			buildSteps = append(buildSteps, Step{
 				Name: "Setup Rust",
 				Uses: ActionRustToolchain,
 				With: map[string]any{"cache": true},
+			})
+		case req == "cross-linker:linux-aarch64":
+			buildSteps = append(buildSteps, Step{
+				Name: "Install ARM Linker",
+				Run:  "sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu",
+			})
+		case req == "pkg:musl-tools":
+			buildSteps = append(buildSteps, Step{
+				Name: "Install Musl Tools",
+				Run:  "sudo apt-get update && sudo apt-get install -y musl-tools",
 			})
 		}
 	}
