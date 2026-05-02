@@ -1,0 +1,75 @@
+name: Update Action Constants
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+
+jobs:
+  update-constants:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Check and Update Constants
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CONSTANTS_FILE="internal/pipeline/github/constants.go"
+          REPOS=(
+            "actions/checkout"
+            "actions/setup-go"
+            "actions/upload-artifact"
+            "actions/download-artifact"
+            "softprops/action-gh-release"
+            "actions-rust-lang/setup-rust-toolchain"
+          )
+
+          UPDATED=false
+
+          for repo in "${REPOS[@]}"; do
+            echo "Checking $repo..."
+            LATEST_RAW=$(gh api repos/$repo/releases/latest --jq .tag_name 2>/dev/null || gh api repos/$repo/tags --jq '.[0].name' 2>/dev/null)
+            
+            if [ -n "$LATEST_RAW" ]; then
+              CURRENT_VER=$(grep -o "$repo@v[^ \"]*" "$CONSTANTS_FILE" | cut -d'@' -f2)
+              if [ -n "$CURRENT_VER" ]; then
+                DOT_COUNT=$(echo "$CURRENT_VER" | tr -cd '.' | wc -c)
+                
+                if [ "$DOT_COUNT" -eq 0 ]; then
+                  NEW_VER=$(echo "$LATEST_RAW" | grep -oE '^v[0-9]+')
+                elif [ "$DOT_COUNT" -eq 1 ]; then
+                  NEW_VER=$(echo "$LATEST_RAW" | grep -oE '^v[0-9]+\.[0-9]+')
+                else
+                  NEW_VER=$(echo "$LATEST_RAW" | grep -oE '^v[0-9]+\.[0-9]+\.[0-9]+')
+                fi
+
+                if [ -n "$NEW_VER" ] && [ "$CURRENT_VER" != "$NEW_VER" ]; then
+                  echo "Updating $repo: $CURRENT_VER -> $NEW_VER"
+                  sed -i "s|$repo@$CURRENT_VER|$repo@$NEW_VER|g" "$CONSTANTS_FILE"
+                  UPDATED=true
+                fi
+              fi
+            fi
+          done
+
+          if [ "$UPDATED" = "true" ]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          fi
+        id: check_changes
+
+      - name: Create Pull Request
+        if: steps.check_changes.outputs.changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update github action constants to latest versions"
+          title: "chore: update github action constants"
+          body: "Automated update of GitHub Action versions defined in internal/pipeline/github/constants.go"
+          branch: "automation/update-constants"
+          base: "main"
+          delete-branch: true
