@@ -1,7 +1,7 @@
 package github
 
 const (
-	ActionCheckout         = "actions/checkout@v6"
+	ActionCheckout         = "actions/checkout@v5"
 	ActionSetupGo          = "actions/setup-go@v6"
 	ActionUploadArtifact   = "actions/upload-artifact@v7"
 	ActionDownloadArtifact = "actions/download-artifact@v8"
