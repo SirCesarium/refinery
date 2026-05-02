@@ -1,11 +1,11 @@
 package cli
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/SirCesarium/refinery/internal/config"
+	"github.com/SirCesarium/refinery/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -16,10 +16,10 @@ var initCmd = &cobra.Command{
 	Short: "Initialize a new refinery project",
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		ui.Section("Initialization")
 		workingDir, err := os.Getwd()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting current directory: %v\n", err)
-			os.Exit(1)
+			ui.Fatal(err, "Failed to determine current working directory. Check your permissions.")
 		}
 
 		projectName := filepath.Base(workingDir)
@@ -29,19 +29,18 @@ var initCmd = &cobra.Command{
 
 		if !force {
 			if _, err := os.Stat("refinery.toml"); err == nil {
-				fmt.Println("Error: refinery.toml already exists. Use --force to overwrite.")
-				return
+				ui.Fatal(nil, "refinery.toml already exists. Use --force to overwrite if you are sure.")
 			}
 		}
 
 		cfg := config.Default(projectName)
 
 		if err := cfg.Write("refinery.toml"); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing config file: %v\n", err)
-			os.Exit(1)
+			ui.Fatal(err, "Failed to write 'refinery.toml'. Ensure you have write permissions in this directory.")
 		}
 
-		fmt.Printf("Successfully initialized refinery project: %s\n", projectName)
+		ui.Success("Successfully initialized refinery project: %s", projectName)
+		ui.Info("You can now edit 'refinery.toml' to define your artifacts.")
 	},
 }
 

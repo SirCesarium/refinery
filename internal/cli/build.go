@@ -1,12 +1,10 @@
 package cli
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/SirCesarium/refinery/internal/app"
 	"github.com/SirCesarium/refinery/internal/config"
 	"github.com/SirCesarium/refinery/internal/engine"
+	"github.com/SirCesarium/refinery/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -21,23 +19,21 @@ var buildCmd = &cobra.Command{
 	Use:   "build",
 	Short: "Build and package an artifact based on configuration",
 	Run: func(cmd *cobra.Command, args []string) {
+		ui.Section("Initialization")
 		cfg, err := config.Load("refinery.toml")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-			os.Exit(1)
+			ui.Fatal(err, "Ensure 'refinery.toml' exists and is valid. Run 'refinery init' if you haven't yet.")
 		}
 
 		art, ok := cfg.Artifacts[artName]
 		if !ok {
-			fmt.Fprintf(os.Stderr, "Artifact %s not found in config\n", artName)
-			os.Exit(1)
+			ui.Fatal(nil, "Artifact '"+artName+"' not found in config. Check your refinery.toml.")
 		}
 
 		registry := app.NewDefaultEngineRegistry()
 		eng := registry.Get(cfg.Project.Lang)
 		if eng == nil {
-			fmt.Fprintf(os.Stderr, "No engine found for language: %s\n", cfg.Project.Lang)
-			os.Exit(1)
+			ui.Fatal(nil, "No engine found for language: "+cfg.Project.Lang)
 		}
 
 		opts := engine.BuildOptions{
@@ -47,20 +43,26 @@ var buildCmd = &cobra.Command{
 			ABI:          abi,
 		}
 
+		ui.Section("Building")
+		ui.Info("Target: %s-%s-%s", osName, arch, abi)
 		if err := eng.Build(cfg, art, opts); err != nil {
-			fmt.Fprintf(os.Stderr, "Build failed: %v\n", err)
-			os.Exit(1)
+			ui.Fatal(err, "The build command failed. Check the logs above for specific toolchain errors (e.g., cargo, gcc).")
 		}
+		ui.Success("Build completed successfully")
 
-		for _, format := range art.Packages {
-			fmt.Printf("Packaging as %s...\n", format)
-			if err := eng.Package(cfg, art, opts, format); err != nil {
-				fmt.Fprintf(os.Stderr, "Packaging failed for %s: %v\n", format, err)
-				os.Exit(1)
+		if len(art.Packages) > 0 {
+			ui.Section("Packaging")
+			for _, format := range art.Packages {
+				ui.Info("Packaging as %s...", format)
+				if err := eng.Package(cfg, art, opts, format); err != nil {
+					ui.Fatal(err, "Packaging failed for "+format+". Ensure you have the necessary packager tools installed.")
+				}
+				ui.Success("Packaged as %s", format)
 			}
 		}
 
-		fmt.Println("Build and packaging completed successfully")
+		ui.Section("Finalization")
+		ui.Success("All tasks completed successfully for %s", artName)
 	},
 }
 

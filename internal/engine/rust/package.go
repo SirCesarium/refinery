@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,30 +21,30 @@ func (e *RustEngine) pkg(cfg *config.Config, art *config.ArtifactConfig, artifac
 	switch format {
 	case "deb":
 		if osName != "linux" || abi == "musl" || arch == "wasm32" {
-			return nil
+			return fmt.Errorf("deb packaging is only supported for linux (non-musl, non-wasm)")
 		}
 		if _, err := exec.LookPath("cargo-deb"); err != nil {
-			return nil
+			return fmt.Errorf("cargo-deb not found. Install it with: cargo install cargo-deb")
 		}
 		bestMatch := e.getBestMatch(art, osName, arch, abi)
 		target := e.resolveTarget(*bestMatch, arch, abi)
 		return e.runCargoPackager("deb", []string{"--target", target})
 	case "rpm":
 		if osName != "linux" || abi == "musl" || arch == "wasm32" {
-			return nil
+			return fmt.Errorf("rpm packaging is only supported for linux (non-musl, non-wasm)")
 		}
 		if _, err := exec.LookPath("cargo-generate-rpm"); err != nil {
-			return nil
+			return fmt.Errorf("cargo-generate-rpm not found. Install it with: cargo install cargo-generate-rpm")
 		}
 		bestMatch := e.getBestMatch(art, osName, arch, abi)
 		target := e.resolveTarget(*bestMatch, arch, abi)
 		return e.runCargoPackager("generate-rpm", []string{"--target", target})
 	case "msi":
 		if osName != "windows" {
-			return nil
+			return fmt.Errorf("msi packaging is only supported for windows")
 		}
 		if _, err := exec.LookPath("candle"); err != nil {
-			return nil
+			return fmt.Errorf("WiX Toolset (candle/light) not found. Please install it to generate MSI packages.")
 		}
 		bestMatch := e.getBestMatch(art, osName, arch, abi)
 		target := e.resolveTarget(*bestMatch, arch, abi)
@@ -52,8 +53,9 @@ func (e *RustEngine) pkg(cfg *config.Config, art *config.ArtifactConfig, artifac
 		return e.createTarGz(cfg, art, artifactName, osName, arch, abi, manifest)
 	case "zip":
 		return e.createZip(cfg, art, artifactName, osName, arch, abi, manifest)
+	default:
+		return fmt.Errorf("unsupported package format: %s", format)
 	}
-	return nil
 }
 
 func (e *RustEngine) createTarGz(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi string, manifest *cargoManifest) error {

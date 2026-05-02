@@ -8,7 +8,9 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "refinery",
-	Short: "Multi-ecosystem artifact orchestrator",
+	Short: "Refinery: Multi-ecosystem artifact orchestrator",
+	Long: `Refinery simplifies building, packaging, and distributing software artifacts
+across different languages and platforms.`,
 }
 
 func Execute() {

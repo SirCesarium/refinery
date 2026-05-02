@@ -99,10 +99,14 @@ func (e *RustEngine) setupEnvironment(art *config.ArtifactConfig, osName, arch, 
 		}
 
 		if depTarget, ok := bestMatch.LangOpts["deployment_target"].(string); ok {
-			os.Setenv("MACOSX_DEPLOYMENT_TARGET", depTarget)
+			if err := os.Setenv("MACOSX_DEPLOYMENT_TARGET", depTarget); err != nil {
+				return fmt.Errorf("failed to set MACOSX_DEPLOYMENT_TARGET: %w", err)
+			}
 		}
 		if sdk, ok := bestMatch.LangOpts["sdk_root"].(string); ok {
-			os.Setenv("SDKROOT", sdk)
+			if err := os.Setenv("SDKROOT", sdk); err != nil {
+				return fmt.Errorf("failed to set SDKROOT: %w", err)
+			}
 		}
 	}
 
@@ -128,12 +132,16 @@ func (e *RustEngine) setupEnvironment(art *config.ArtifactConfig, osName, arch, 
 		if shouldApply {
 			envKey := fmt.Sprintf("CARGO_TARGET_%s_LINKER",
 				strings.ReplaceAll(strings.ReplaceAll(strings.ToUpper(target), "-", "_"), ".", "_"))
-			os.Setenv(envKey, linker)
+			if err := os.Setenv(envKey, linker); err != nil {
+				return fmt.Errorf("failed to set linker env %s: %w", envKey, err)
+			}
 		}
 	}
 
 	if osName == "darwin" && os.Getenv("MACOSX_DEPLOYMENT_TARGET") == "" {
-		os.Setenv("MACOSX_DEPLOYMENT_TARGET", "11.0")
+		if err := os.Setenv("MACOSX_DEPLOYMENT_TARGET", "11.0"); err != nil {
+			return fmt.Errorf("failed to set default MACOSX_DEPLOYMENT_TARGET: %w", err)
+		}
 	}
 	return nil
 }

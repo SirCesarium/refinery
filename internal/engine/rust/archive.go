@@ -3,6 +3,7 @@ package rust
 import (
 	"archive/tar"
 	"archive/zip"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -41,14 +42,24 @@ func (e *RustEngine) archiveArtifactFiles(tw *tar.Writer, zw *zip.Writer, cfg *c
 
 
 	if art.Headers {
-		headers, _ := filepath.Glob("*.h")
-		headers2, _ := filepath.Glob("*.hpp")
+		headers, err := filepath.Glob("*.h")
+		if err != nil {
+			return fmt.Errorf("failed to search for .h headers: %w", err)
+		}
+		headers2, err := filepath.Glob("*.hpp")
+		if err != nil {
+			return fmt.Errorf("failed to search for .hpp headers: %w", err)
+		}
 		headers = append(headers, headers2...)
 		for _, h := range headers {
 			if tw != nil {
-				e.addFileToTar(tw, h, h)
+				if err := e.addFileToTar(tw, h, h); err != nil {
+					return fmt.Errorf("failed to add header %s to tar: %w", h, err)
+				}
 			} else {
-				e.addFileToZip(zw, h, h)
+				if err := e.addFileToZip(zw, h, h); err != nil {
+					return fmt.Errorf("failed to add header %s to zip: %w", h, err)
+				}
 			}
 		}
 	}
