@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"sort"
+
 	"github.com/SirCesarium/refinery/internal/app"
 	"github.com/SirCesarium/refinery/internal/config"
 	"github.com/SirCesarium/refinery/internal/engine"
@@ -101,7 +103,14 @@ func mergePackages(global, target []string) []string {
 }
 
 func findTargetPackages(art *config.ArtifactConfig, osName, arch, abi string) []string {
-	for _, tCfg := range art.Targets {
+	keys := make([]string, 0, len(art.Targets))
+	for k := range art.Targets {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		tCfg := art.Targets[k]
 		if tCfg.OS != osName {
 			continue
 		}

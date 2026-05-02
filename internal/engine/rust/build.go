@@ -33,7 +33,19 @@ func (e *RustEngine) build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	}
 
 	version := manifest.Package.Version
-	resolvedHooks := art.Hooks.ResolveAll(opts.ArtifactName, opts.OS, opts.Arch, version, opts.ABI, "")
+
+	ext := ""
+	if art.Type == "bin" {
+		ext, _ = e.getExtAndPrefix(opts.OS, art.Type, "bin")
+	} else if len(art.LibraryTypes) > 0 {
+		ext, _ = e.getExtAndPrefix(opts.OS, art.Type, art.LibraryTypes[0])
+	} else {
+		ext, _ = e.getExtAndPrefix(opts.OS, art.Type, "cdylib")
+	}
+	binaryName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, version, opts.ABI, ext)
+	binaryPath := filepath.Join(cfg.OutputDir, binaryName)
+
+	resolvedHooks := art.Hooks.ResolveAll(opts.ArtifactName, opts.OS, opts.Arch, version, opts.ABI, binaryPath)
 	for _, hook := range resolvedHooks.PreBuild {
 		if err := e.runHook(hook); err != nil {
 			return fmt.Errorf("pre-build hook failed: %w", err)
@@ -152,7 +164,12 @@ func copyFile(src, dst string) error {
 	}
 	defer in.Close()
 
-	out, err := os.Create(dst)
+	stat, err := in.Stat()
+	if err != nil {
+		return err
+	}
+
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, stat.Mode())
 	if err != nil {
 		return err
 	}

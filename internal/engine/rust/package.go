@@ -27,6 +27,9 @@ func (e *RustEngine) pkg(cfg *config.Config, art *config.ArtifactConfig, artifac
 			return fmt.Errorf("cargo-deb not found. Install it with: cargo install cargo-deb")
 		}
 		bestMatch := e.getBestMatch(art, osName, arch, abi)
+		if bestMatch == nil {
+			return fmt.Errorf("no matching target found for %s-%s-%s", osName, arch, abi)
+		}
 		target := e.resolveTarget(*bestMatch, arch, abi)
 		return e.runCargoPackager("deb", []string{"--target", target})
 	case "rpm":
@@ -37,6 +40,9 @@ func (e *RustEngine) pkg(cfg *config.Config, art *config.ArtifactConfig, artifac
 			return fmt.Errorf("cargo-generate-rpm not found. Install it with: cargo install cargo-generate-rpm")
 		}
 		bestMatch := e.getBestMatch(art, osName, arch, abi)
+		if bestMatch == nil {
+			return fmt.Errorf("no matching target found for %s-%s-%s", osName, arch, abi)
+		}
 		target := e.resolveTarget(*bestMatch, arch, abi)
 		return e.runCargoPackager("generate-rpm", []string{"--target", target})
 	case "msi":
@@ -47,6 +53,9 @@ func (e *RustEngine) pkg(cfg *config.Config, art *config.ArtifactConfig, artifac
 			return fmt.Errorf("WiX Toolset (candle/light) not found. Please install it to generate MSI packages.")
 		}
 		bestMatch := e.getBestMatch(art, osName, arch, abi)
+		if bestMatch == nil {
+			return fmt.Errorf("no matching target found for %s-%s-%s", osName, arch, abi)
+		}
 		target := e.resolveTarget(*bestMatch, arch, abi)
 		return e.runCargoPackager("wix", []string{"--target", target})
 	case "tar.gz", "targz":

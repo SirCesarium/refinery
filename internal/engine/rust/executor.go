@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/SirCesarium/refinery/internal/config"
 )
@@ -31,10 +33,43 @@ func (e *RustEngine) addTarget(target string) error {
 		}
 	}
 
-	cmd := exec.Command("rustup", "target", "add", target)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	lockPath := filepath.Join(os.TempDir(), "refinery-rustup.lock")
+	for attempt := 0; attempt < 30; attempt++ {
+		lockFile, openErr := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0644)
+		if openErr != nil {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		if e.isTargetInstalled(target) {
+			os.Remove(lockPath)
+			lockFile.Close()
+			return nil
+		}
+
+		cmd := exec.Command("rustup", "target", "add", target)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		runErr := cmd.Run()
+		os.Remove(lockPath)
+		lockFile.Close()
+		return runErr
+	}
+
+	return fmt.Errorf("could not acquire lock to install target %s", target)
+}
+
+func (e *RustEngine) isTargetInstalled(target string) bool {
+	out, err := exec.Command("rustup", "target", "list", "--installed").Output()
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.TrimSpace(line) == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *RustEngine) runCargoBuild(art *config.ArtifactConfig, artifactName, osName, arch, abi, target, profile string) error {

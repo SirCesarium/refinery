@@ -11,7 +11,7 @@ mkdir -p logs
 
 declare -A TARGETS
 TARGETS["linux"]="x86_64:gnu x86_64:musl i686:gnu aarch64:gnu"
-TARGETS["windows"]="x86_64:gnu i686:gnu"
+TARGETS["windows"]="x86_64:msvc i686:msvc"
 TARGETS["wasi"]="wasm32"
 
 PIDS=()
