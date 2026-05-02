@@ -32,15 +32,21 @@ jobs:
             exit 0
           }
           
+          # Clean existing files (preserves .git)
           rm -rf wiki_repo/*
           
-          cp -r docs/* wiki_repo/
-          
-          if [ -f wiki_repo/README.md ]; then
-            mv wiki_repo/README.md wiki_repo/Home.md
-          fi
+          # Copy everything from docs/
+          cp -rv docs/* wiki_repo/
           
           cd wiki_repo
+          
+          # Robust case-insensitive rename of README.md to Home.md
+          README_FILE=$(find . -maxdepth 1 -iname "readme.md" -print -quit)
+          if [ -n "$README_FILE" ]; then
+            echo "Found main page at $README_FILE, renaming to Home.md"
+            mv "$README_FILE" Home.md
+          fi
+          
           if [[ -n "$(git status --porcelain)" ]]; then
             git add .
             git commit -m "docs: auto-sync from main branch (docs/)"
