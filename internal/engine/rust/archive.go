@@ -40,7 +40,6 @@ func (e *RustEngine) archiveArtifactFiles(tw *tar.Writer, zw *zip.Writer, cfg *c
 		}
 	}
 
-
 	if art.Headers {
 		headers, err := filepath.Glob("*.h")
 		if err != nil {

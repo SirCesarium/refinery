@@ -81,7 +81,6 @@ func (e *RustEngine) runCargoBuild(art *config.ArtifactConfig, artifactName, osN
 	return cmd.Run()
 }
 
-
 func (e *RustEngine) runCargoPackager(command string, args []string) error {
 	cmd := exec.Command("cargo", append([]string{command}, args...)...)
 	cmd.Stdout = os.Stdout

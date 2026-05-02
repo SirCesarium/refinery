@@ -15,12 +15,12 @@ func NewDefaultEngineRegistry() *engine.EngineRegistry {
 
 func NewDefaultProviderRegistry() (*pipeline.ProviderRegistry, error) {
 	r := pipeline.NewRegistry()
-	
+
 	gh, err := github.NewProvider("refinery-build")
 	if err != nil {
 		return nil, err
 	}
 	r.Register(gh)
-	
+
 	return r, nil
 }

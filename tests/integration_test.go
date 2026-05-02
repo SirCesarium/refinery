@@ -28,7 +28,7 @@ func TestFullWorkflow(t *testing.T) {
 			"linux-x64": {OS: "linux", Archs: []string{"x86_64"}, ABIs: []string{"gnu"}},
 		},
 	}
-	
+
 	err = cfg.Write("refinery.toml")
 	if err != nil {
 		t.Fatalf("failed to write config: %v", err)

@@ -91,4 +91,3 @@ func (e *RustEngine) createZip(cfg *config.Config, art *config.ArtifactConfig, a
 
 	return e.archiveArtifactFiles(nil, zw, cfg, art, artifactName, osName, arch, abi, manifest)
 }
-
