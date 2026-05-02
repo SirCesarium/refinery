@@ -88,14 +88,26 @@ check_exec() {
     fi
 }
 
-# Only run emulated tests if tools are present
-check_exec "smoke-bin-linux-x86_64-gnu" ""
-[ -x "$(command -v qemu-i386)" ] && check_exec "smoke-bin-linux-i686-gnu" "qemu-i386"
-[ -x "$(command -v qemu-aarch64)" ] && check_exec "smoke-bin-linux-aarch64-gnu" "qemu-aarch64 -L /usr/aarch64-linux-gnu"
-[ -x "$(command -v wasmtime)" ] && check_exec "smoke-bin-wasi-wasm32.wasm" "wasmtime"
+# Only run tests for OSes that were built (respect FILTER_OS)
+if [ -z "$FILTER_OS" ] || [[ "$FILTER_OS" == *"linux"* ]]; then
+    check_exec "smoke-bin-linux-x86_64-gnu" ""
+    [ -x "$(command -v qemu-i386)" ] && check_exec "smoke-bin-linux-i686-gnu" "qemu-i386"
+    [ -x "$(command -v qemu-aarch64)" ] && check_exec "smoke-bin-linux-aarch64-gnu" "qemu-aarch64 -L /usr/aarch64-linux-gnu"
+fi
+
+if [ -z "$FILTER_OS" ] || [[ "$FILTER_OS" == *"wasi"* ]]; then
+    [ -x "$(command -v wasmtime)" ] && check_exec "smoke-bin-wasi-wasm32.wasm" "wasmtime"
+fi
+
+if [ -z "$FILTER_OS" ] || [[ "$FILTER_OS" == *"windows"* ]]; then
+    [ -f "dist/smoke-bin-windows-x86_64-msvc.exe" ] && echo "smoke-bin-windows-x86_64-msvc.exe: OK"
+    [ -f "dist/smoke-bin-windows-i686-msvc.exe" ] && echo "smoke-bin-windows-i686-msvc.exe: OK"
+fi
 
 # 3. Verify existence
-[ -f "dist/smoke-bin-0.1.0-linux-x86_64-gnu.deb" ] && echo ".deb: OK"
-[ -f "dist/smoke-bin-0.1.0-linux-x86_64-gnu.rpm" ] && echo ".rpm: OK"
+if [ -z "$FILTER_OS" ] || [[ "$FILTER_OS" == *"linux"* ]]; then
+    [ -f "dist/smoke-bin-0.1.0-linux-x86_64-gnu.deb" ] && echo ".deb: OK"
+    [ -f "dist/smoke-bin-0.1.0-linux-x86_64-gnu.rpm" ] && echo ".rpm: OK"
+fi
 
 echo "All smoke tests PASSED!"
