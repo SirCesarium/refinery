@@ -1,27 +1,152 @@
-# 🦀🏭 Refinery-RS (Legacy)
+# Refinery
 
-> Refining Rust into universal artifacts.
+**Multi-ecosystem artifact orchestrator and CI/CD pipeline generator.**
 
-`refinery` is an orchestration tool designed to automate GitHub Actions workflows, manage `Cargo.toml` metadata, and streamline cross-compilation for Rust projects.
+---
 
-> [!IMPORTANT]
-> This Rust implementation is preserved under the `v1.0-rust-legacy` tag. The project is migrating to **Go** for better YAML ecosystem stability and maintenance.
-> The project has migrated to Go to escape the "dead-crate hell" of the Rust YAML ecosystem (e.g., the deprecation of serde_yaml). Moving to Go ensures long-term stability by using industry-standard tooling (yaml.v3) for orchestration, avoiding the maintenance burden of abandoned low-level dependencies
+`refinery` is a build orchestrator designed to decouple compilation logic from CI/CD providers. It manages the lifecycle of an artifact: from configuration validation and cross-compilation to multi-format packaging and automated workflow generation.
 
 ## Features
 
--   **`init`**: Interactive project setup and `refinery.toml` generation.
--   **`forge`**: Generates unified CI/CD pipelines (`refinery.yml`) for Linux, Windows, and macOS.
--   **`build`**: Orchestrates local builds and header generation via `cbindgen`.
--   **`setup`**: Configures environments for `deb`, `rpm`, and `msi` (WiX) installers.
--   **`release`**: Manages SemVer bumping and automated Git tagging.
+- **Strategy-Based Architecture**
+  - Modular engines for languages (Rust, etc.) and CI providers (GitHub Actions).
+  - Registry-based system for extending supported ecosystems.
 
-## Why the Migration?
+- **Multi-Format Packaging**
+  - Support for distribution formats: `.deb`, `.rpm`, `.msi`, `.tar.gz`, and `.zip`.
+  - Maps internal build types to system-native extensions.
 
-The transition to **Go** addresses:
-*   **YAML Stability**: Leveraging `yaml.v3` to avoid the fragmentation of the Rust YAML ecosystem.
-*   **Orchestration Focus**: Prioritizing simplicity in pipeline generation over low-level language constraints.
+- **Fail-Fast Validation**
+  - TOML schema verification for `refinery.toml`.
+  - Manifest cross-validation (e.g., against `Cargo.toml`) before execution.
 
-## License
+- **Cross-Compilation Management**
+  - Automatic linker selection for Linux ARM and x86 targets.
+  - Support for WebAssembly targets (`wasm32-unknown-unknown` and `wasm32-wasip1`).
 
-This project is licensed under MIT.
+- **Build Hooks**
+  - Execution of `pre_build` and `post_build` system commands.
+  - Variable substitution for hook commands.
+
+- **CI Automation**
+  - Generates GitHub Actions workflows using composite actions.
+  - Optimized binary delivery to avoid compilation overhead in CI.
+
+### Workflow
+
+1. **Validation:** Verifies configuration and project manifest integrity.
+2. **Orchestration:** Invokes the appropriate compiler for the specified target triple.
+3. **Packaging:** Groups binaries into archives or system-native installers.
+4. **CI Generation:** Outputs the necessary YAML for automated pipelines.
+
+## Architecture & Ecosystems
+
+### Why an Orchestrator?
+Refinery abstracts underlying build tools. Instead of writing complex CI scripts per project, you define **what** to build and **where** to distribute. Refinery handles the **how** by orchestrating compilers (like Cargo) and system packagers.
+
+### ABIs: GNU vs. MUSL vs. MSVC
+Refinery allows targeting specific ABIs for cross-platform compatibility:
+- **MSVC (Windows):** The standard for Windows development using the Microsoft Visual C++ runtime.
+- **GNU (Linux/Windows):** Uses the GNU C Library (glibc). Standard for most desktop/server Linux.
+- **MUSL (Linux):** A lightweight C library. Essential for creating **fully static binaries** that run on any Linux distribution (like Alpine) without external dependencies.
+
+### WebAssembly & WASI
+- **WASM (`wasm32-unknown-unknown`):** For running code in web browsers.
+- **WASI (`wasm32-wasip1`):** A system interface for running WebAssembly outside the browser (servers, edge), providing controlled access to system resources.
+
+### SDK Bundling (Archives for Libraries)
+When a `lib` artifact specifies `zip` or `tar.gz`, Refinery creates an **SDK Bundle**:
+1. **Multi-format inclusion:** Automatically groups all built types (e.g., both `.so` and `.a`) into the same archive.
+2. **Automatic Headers:** If `headers = true`, Refinery scans and includes all `.h` and `.hpp` files.
+3. **Distribution-Ready:** Provides everything a developer needs to link against your library in a single download.
+
+## Installation
+
+### From Source (Go)
+
+```bash
+go install github.com/SirCesarium/refinery/cmd/refinery@latest
+```
+
+### Direct Download
+
+Download the binary for your system from the [Releases](https://github.com/SirCesarium/refinery/releases/latest) page.
+
+## Command Reference
+
+| Command   | Description                | Details                                              |
+| :-------- | :------------------------- | :--------------------------------------------------- |
+| `init`    | Initialize project         | Creates a template `refinery.toml`.                  |
+| `build`   | Compile & Package          | Executes building and packaging for a target.        |
+| `migrate` | Generate CI workflow       | Generates CI provider files (e.g., GitHub).          |
+
+**Options:**
+
+- `--artifact`: Artifact name from configuration.
+- `--os`: Target operating system.
+- `--arch`: Target architecture.
+- `--abi`: Target ABI (optional).
+
+## Usage Examples
+
+### 1. Initialize
+
+```bash
+refinery init my-project
+```
+
+### 2. Generate CI
+
+```bash
+refinery migrate github
+```
+
+### 3. Local Build
+
+```bash
+# Example: Build a specific binary for Linux ARM64
+refinery build --artifact my-app --os linux --arch aarch64 --abi musl
+```
+
+## Configuration (`refinery.toml`)
+
+```toml
+refinery_version = "latest"
+output_dir = "dist"
+
+[project]
+name = "my-project"
+lang = "rust"
+author = "Name"
+license = "MIT"
+
+[artifacts.my_app]
+type = "bin"
+source = "src/main.rs"
+packages = ["deb", "tar.gz"]
+
+[artifacts.my_app.targets.linux_arm]
+os = "linux"
+archs = ["aarch64"]
+abis = ["gnu", "musl"]
+
+[artifacts.my_app_lib]
+type = "lib"
+library_types = ["cdylib", "staticlib"]
+packages = ["zip"]
+
+[artifacts.my_app_lib.targets.windows]
+os = "windows"
+archs = ["x86_64"]
+abis = ["msvc"]
+
+[naming]
+binary = "{artifact}-{os}-{arch}{abi}"
+package = "{artifact}-{version}-{os}-{arch}{abi}.{ext}"
+```
+
+## Technical Details
+
+- **Language:** Written in Go.
+- **Packaging:** Archive generation (`tar.gz`, `zip`) uses Go standard library.
+- **Environment:** Scoped environment variables for linker and target isolation.
