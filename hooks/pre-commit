@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+
+go mod verify
+if [ "$(gofmt -l . | wc -l)" -gt 0 ]; then
+    echo "Error: Code is not formatted. Run 'go fmt ./...'"
+    gofmt -l .
+    exit 1
+fi
+go vet ./...
+make test
