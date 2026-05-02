@@ -8,6 +8,11 @@ import (
 func TestLoadManifest(t *testing.T) {
 	e := &RustEngine{}
 
+	tmpDir := t.TempDir()
+	origWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origWd)
+
 	// Test valid manifest
 	content := `
 [package]
@@ -24,7 +29,6 @@ name = "test-bin"
 	if err := os.WriteFile("Cargo.toml", []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove("Cargo.toml")
 
 	m, err := e.loadManifest()
 	if err != nil {

@@ -8,6 +8,11 @@ import (
 )
 
 func TestRustEngineValidate(t *testing.T) {
+	tmpDir := t.TempDir()
+	origWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origWd)
+
 	cargoContent := `
 [package]
 name = "my-rust-app"
@@ -21,7 +26,6 @@ path = "src/main.rs"
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove("Cargo.toml")
 
 	e := &RustEngine{}
 	cfg := &config.Config{

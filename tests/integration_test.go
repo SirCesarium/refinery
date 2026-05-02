@@ -10,12 +10,7 @@ import (
 )
 
 func TestFullWorkflow(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "refinery-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
-
+	tmpDir := t.TempDir()
 	origWd, _ := os.Getwd()
 	os.Chdir(tmpDir)
 	defer os.Chdir(origWd)
@@ -29,7 +24,7 @@ func TestFullWorkflow(t *testing.T) {
 		},
 	}
 
-	err = cfg.Write("refinery.toml")
+	err := cfg.Write("refinery.toml")
 	if err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
@@ -97,8 +92,7 @@ func TestEdgeCases(t *testing.T) {
 		t.Error("expected error for missing Cargo.toml in validation")
 	}
 
-	tmpDir, _ := os.MkdirTemp("", "mismatch-*")
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 	origWd, _ := os.Getwd()
 	os.Chdir(tmpDir)
 	defer os.Chdir(origWd)

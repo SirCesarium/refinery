@@ -2,10 +2,14 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
 func TestLoadInvalidConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "invalid.toml")
+
 	content := `
 refinery_version = "2"
 output_dir = "dist"
@@ -18,13 +22,12 @@ source = "src/main.rs"
 [artifacts.invalid.targets.linux]
 archs = ["x86_64"]
 `
-	err := os.WriteFile("invalid.toml", []byte(content), 0644)
+	err := os.WriteFile(configPath, []byte(content), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove("invalid.toml")
 
-	_, err = Load("invalid.toml")
+	_, err = Load(configPath)
 	if err == nil {
 		t.Error("expected error for invalid artifact type")
 	}
@@ -41,14 +44,16 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestConfigWrite(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "test.toml")
+
 	cfg := Default("write-test")
-	err := cfg.Write("test.toml")
+	err := cfg.Write(configPath)
 	if err != nil {
 		t.Fatalf("failed to write: %v", err)
 	}
-	defer os.Remove("test.toml")
 
-	if _, err := os.Stat("test.toml"); os.IsNotExist(err) {
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		t.Error("test.toml was not created")
 	}
 }
