@@ -32,12 +32,14 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          go build -o refinery${{ matrix.os == 'windows' && '.exe' || '' }} ./cmd/refinery/main.go
+          BINARY_NAME="refinery-${{ matrix.os }}-${{ matrix.arch }}"
+          [ "${{ matrix.os }}" = "windows" ] && BINARY_NAME="${BINARY_NAME}.exe"
+          go build -o "${BINARY_NAME}" ./cmd/refinery/main.go
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
         with:
           name: refinery-${{ matrix.os }}-${{ matrix.arch }}
-          path: refinery*
+          path: refinery-*
 
   smoke-test:
     name: Smoke Test (${{ matrix.os }})

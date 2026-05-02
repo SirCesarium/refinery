@@ -62,16 +62,16 @@ runs:
         URL="https://github.com/SirCesarium/refinery/releases/download/${VERSION}/${BINARY_NAME}"
 
         mkdir -p .refinery_bin
-        if ! curl -sSLf -o ".refinery_bin/refinery_raw" "$URL"; then
+        if ! curl -sSLf -o ".refinery_bin/${BINARY_NAME}" "$URL"; then
           echo "::error::Download failed: $URL"
           exit 1
         fi
 
-        chmod +x ".refinery_bin/refinery_raw"
+        chmod +x ".refinery_bin/${BINARY_NAME}"
         if [ "$R_OS" = "windows" ]; then
-          mv ".refinery_bin/refinery_raw" ".refinery_bin/refinery.exe"
+          mv ".refinery_bin/${BINARY_NAME}" ".refinery_bin/refinery.exe"
         else
-          mv ".refinery_bin/refinery_raw" ".refinery_bin/refinery"
+          mv ".refinery_bin/${BINARY_NAME}" ".refinery_bin/refinery"
         fi
 
         echo "$(pwd)/.refinery_bin" >> $GITHUB_PATH
