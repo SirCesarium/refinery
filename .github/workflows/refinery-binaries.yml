@@ -52,17 +52,17 @@ jobs:
             runner: ubuntu-latest
             artifact_os: linux
             artifact_arch: amd64
-            refinery_bin: ./refinery
+            refinery_bin: ../../../refinery
           - os: windows
             runner: windows-latest
             artifact_os: windows
             artifact_arch: amd64
-            refinery_bin: ./refinery.exe
+            refinery_bin: ../../../refinery.exe
           - os: darwin
             runner: macos-latest
             artifact_os: darwin
             artifact_arch: arm64
-            refinery_bin: ./refinery
+            refinery_bin: ../../../refinery
 
     steps:
       - name: Checkout
