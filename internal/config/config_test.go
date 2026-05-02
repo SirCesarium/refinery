@@ -30,37 +30,49 @@ archs = ["x86_64"]
 	}
 }
 
-func TestLoadValidConfig(t *testing.T) {
-	content := `
-refinery_version = "2"
-output_dir = "dist"
-
-[project]
-name = "test-project"
-lang = "rust"
-
-[naming]
-binary = "{artifact}"
-package = "{artifact}.{ext}"
-
-[artifacts.test-bin]
-type = "bin"
-source = "src/main.rs"
-[artifacts.test-bin.targets.linux]
-archs = ["x86_64"]
-`
-	err := os.WriteFile("valid.toml", []byte(content), 0644)
-	if err != nil {
-		t.Fatal(err)
+func TestDefaultConfig(t *testing.T) {
+	cfg := Default("my-project")
+	if cfg.Project.Name != "my-project" {
+		t.Errorf("expected my-project, got %s", cfg.Project.Name)
 	}
-	defer os.Remove("valid.toml")
+	if cfg.OutputDir != "dist" {
+		t.Errorf("expected dist, got %s", cfg.OutputDir)
+	}
+}
 
-	cfg, err := Load("valid.toml")
+func TestConfigWrite(t *testing.T) {
+	cfg := Default("write-test")
+	err := cfg.Write("test.toml")
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("failed to write: %v", err)
+	}
+	defer os.Remove("test.toml")
+
+	if _, err := os.Stat("test.toml"); os.IsNotExist(err) {
+		t.Error("test.toml was not created")
+	}
+}
+
+func TestNamingResolution(t *testing.T) {
+	n := NamingConfig{
+		Binary:  "{artifact}-{os}-{arch}-{version}",
+		Package: "{artifact}-{version}.{ext}",
+	}
+	res := n.Resolve(n.Binary, "myart", "linux", "x64", "1.0.0", "gnu", "so")
+	expected := "myart-linux-x64-1.0.0.so"
+	if res != expected {
+		t.Errorf("binary resolve failed: got %s, want %s", res, expected)
 	}
 
-	if cfg.Project.Name != "test-project" {
-		t.Errorf("expected project name test-project, got %s", cfg.Project.Name)
+	res = n.Resolve(n.Binary, "myart", "linux", "x64", "1.0.0", "gnu", "")
+	expected = "myart-linux-x64-1.0.0"
+	if res != expected {
+		t.Errorf("binary resolve without ext failed: got %s, want %s", res, expected)
+	}
+
+	res = n.Resolve(n.Package, "myart", "linux", "x64", "1.0.0", "gnu", "tar.gz")
+	expected = "myart-1.0.0.tar.gz"
+	if res != expected {
+		t.Errorf("package resolve failed: got %s, want %s", res, expected)
 	}
 }
