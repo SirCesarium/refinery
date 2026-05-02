@@ -19,21 +19,28 @@ type Config struct {
 }
 
 type Project struct {
-	Name string `toml:"name" mapstructure:"name"`
-	Lang string `toml:"lang" mapstructure:"lang"`
+	Name        string `toml:"name" mapstructure:"name"`
+	Lang        string `toml:"lang" mapstructure:"lang"`
+	Version     string `toml:"version,omitempty" mapstructure:"version"`
+	Description string `toml:"description,omitempty" mapstructure:"description"`
+	Author      string `toml:"author,omitempty" mapstructure:"author"`
+	License     string `toml:"license,omitempty" mapstructure:"license"`
+	Homepage    string `toml:"homepage,omitempty" mapstructure:"homepage"`
 }
 
 type ArtifactConfig struct {
-	Type    string                  `toml:"type" mapstructure:"type"`
-	Source  string                  `toml:"source" mapstructure:"source"`
-	Formats []string                `toml:"formats,omitempty" mapstructure:"formats"`
-	Headers bool                    `toml:"headers,omitempty" mapstructure:"headers"`
-	Targets map[string]TargetConfig `toml:"targets" mapstructure:"targets"`
-	Hooks   Hooks                   `toml:"hooks,omitempty" mapstructure:"hooks"`
+	Type         string                  `toml:"type" mapstructure:"type"`
+	Source       string                  `toml:"source" mapstructure:"source"`
+	LibraryTypes []string                `toml:"library_types,omitempty" mapstructure:"library_types"`
+	Packages     []string                `toml:"packages,omitempty" mapstructure:"packages"`
+	Headers      bool                    `toml:"headers,omitempty" mapstructure:"headers"`
+	Targets      map[string]TargetConfig `toml:"targets" mapstructure:"targets"`
+	Hooks        Hooks                   `toml:"hooks,omitempty" mapstructure:"hooks"`
 }
 
 type TargetConfig struct {
 	OS       string         `toml:"os" mapstructure:"os"`
+	Runner   string         `toml:"runner,omitempty" mapstructure:"runner"`
 	Archs    []string       `toml:"archs" mapstructure:"archs"`
 	ABIs     []string       `toml:"abis,omitempty" mapstructure:"abis"`
 	Packages []string       `toml:"packages" mapstructure:"packages"`
@@ -43,6 +50,29 @@ type TargetConfig struct {
 type Hooks struct {
 	PreBuild  []string `toml:"pre_build,omitempty" mapstructure:"pre_build"`
 	PostBuild []string `toml:"post_build,omitempty" mapstructure:"post_build"`
+}
+
+func (h Hooks) ResolveAll(artifact, osName, arch, version, abi, binaryPath string) Hooks {
+	resolve := func(scripts []string) []string {
+		resolved := make([]string, len(scripts))
+		r := strings.NewReplacer(
+			"{artifact}", artifact,
+			"{os}", osName,
+			"{arch}", arch,
+			"{version}", version,
+			"{abi}", abi,
+			"{binary}", binaryPath,
+		)
+		for i, s := range scripts {
+			resolved[i] = r.Replace(s)
+		}
+		return resolved
+	}
+
+	return Hooks{
+		PreBuild:  resolve(h.PreBuild),
+		PostBuild: resolve(h.PostBuild),
+	}
 }
 
 type NamingConfig struct {
@@ -180,7 +210,7 @@ func Load(path string) (*Config, error) {
 
 func Default(name string) *Config {
 	return &Config{
-		RefineryVersion: "2",
+		RefineryVersion: "latest",
 		Project: Project{
 			Name: name,
 			Lang: "rust",

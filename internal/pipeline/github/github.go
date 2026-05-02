@@ -142,6 +142,24 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 				If:   "runner.os == 'Linux'",
 				Run:  "sudo apt-get update && sudo apt-get install -y musl-tools",
 			})
+		case req == "pkg:cargo-deb":
+			buildSteps = append(buildSteps, Step{
+				Name: "Install cargo-deb",
+				If:   "runner.os == 'Linux'",
+				Run:  "cargo install cargo-deb",
+			})
+		case req == "pkg:cargo-generate-rpm":
+			buildSteps = append(buildSteps, Step{
+				Name: "Install cargo-generate-rpm",
+				If:   "runner.os == 'Linux'",
+				Run:  "cargo install cargo-generate-rpm",
+			})
+		case req == "pkg:cargo-wix":
+			buildSteps = append(buildSteps, Step{
+				Name: "Install cargo-wix",
+				If:   "runner.os == 'Windows'",
+				Run:  "cargo install cargo-wix",
+			})
 		}
 	}
 

@@ -1,7 +1,11 @@
 package engine
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"compress/gzip"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,8 +19,12 @@ type RustEngine struct{}
 
 type cargoManifest struct {
 	Package struct {
-		Name    string `toml:"name"`
-		Version string `toml:"version"`
+		Name        string   `toml:"name"`
+		Version     string   `toml:"version"`
+		Description string   `toml:"description"`
+		Authors     []string `toml:"authors"`
+		License     string   `toml:"license"`
+		Homepage    string   `toml:"homepage"`
 	} `toml:"package"`
 	Lib *struct {
 		Name string `toml:"name"`
@@ -114,8 +122,23 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	}
 
 	profile := "release"
+	bestMatch := e.getBestMatch(art, opts)
+	if bestMatch != nil {
+		if p, ok := bestMatch.LangOpts["profile"].(string); ok {
+			profile = p
+		}
+	}
+
 	if err := e.setupEnvironment(art, opts, targetTriple); err != nil {
 		return err
+	}
+
+	version := manifest.Package.Version
+	resolvedHooks := art.Hooks.ResolveAll(opts.ArtifactName, opts.OS, opts.Arch, version, opts.ABI, "")
+	for _, hook := range resolvedHooks.PreBuild {
+		if err := e.runHook(hook); err != nil {
+			return fmt.Errorf("pre-build hook failed: %w", err)
+		}
 	}
 
 	if err := e.addTarget(targetTriple); err != nil {
@@ -126,7 +149,17 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 		return err
 	}
 
-	return e.moveArtifacts(cfg, art, opts, targetTriple, manifest.Package.Version, profile)
+	if err := e.moveArtifacts(cfg, art, opts, targetTriple, version, profile, manifest); err != nil {
+		return err
+	}
+
+	for _, hook := range resolvedHooks.PostBuild {
+		if err := e.runHook(hook); err != nil {
+			return fmt.Errorf("post-build hook failed: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (e *RustEngine) GetCIRequirements(cfg *config.Config) []string {
@@ -140,8 +173,141 @@ func (e *RustEngine) GetCIRequirements(cfg *config.Config) []string {
 				reqs = append(reqs, "pkg:musl-tools")
 			}
 		}
+		for _, p := range art.Packages {
+			switch p {
+			case "deb":
+				reqs = append(reqs, "pkg:cargo-deb")
+			case "rpm":
+				reqs = append(reqs, "pkg:cargo-generate-rpm")
+			case "msi":
+				reqs = append(reqs, "pkg:cargo-wix")
+			}
+		}
 	}
 	return reqs
+}
+
+func (e *RustEngine) Package(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, format string) error {
+	manifest, err := e.loadManifest()
+	if err != nil {
+		return err
+	}
+
+	switch format {
+	case "deb":
+		return e.runCargoPackager("deb", []string{"--target", e.resolveTarget(opts)})
+	case "rpm":
+		return e.runCargoPackager("generate-rpm", []string{"--target", e.resolveTarget(opts)})
+	case "msi":
+		return e.runCargoPackager("wix", []string{"--target", e.resolveTarget(opts)})
+	case "tar.gz", "targz":
+		return e.createTarGz(cfg, art, opts, manifest)
+	case "zip":
+		return e.createZip(cfg, art, opts, manifest)
+	}
+	return nil
+}
+
+func (e *RustEngine) runCargoPackager(command string, args []string) error {
+	cmd := exec.Command("cargo", append([]string{command}, args...)...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func (e *RustEngine) createTarGz(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, manifest *cargoManifest) error {
+	ext, _ := e.getExtAndPrefix(opts.OS, art.Type, "cdylib")
+	finalBinaryName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, manifest.Package.Version, opts.ABI, ext)
+
+	packageName := cfg.Naming.Resolve(cfg.Naming.Package, opts.ArtifactName, opts.OS, opts.Arch, manifest.Package.Version, opts.ABI, "tar.gz")
+	outPath := filepath.Join(cfg.OutputDir, packageName)
+
+	f, err := os.Create(outPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	gw := gzip.NewWriter(f)
+	defer gw.Close()
+	tw := tar.NewWriter(gw)
+	defer tw.Close()
+
+	binaryPath := filepath.Join(cfg.OutputDir, finalBinaryName)
+	return e.addFileToTar(tw, binaryPath, finalBinaryName)
+}
+
+func (e *RustEngine) createZip(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, manifest *cargoManifest) error {
+	ext, _ := e.getExtAndPrefix(opts.OS, art.Type, "cdylib")
+	finalBinaryName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, manifest.Package.Version, opts.ABI, ext)
+
+	packageName := cfg.Naming.Resolve(cfg.Naming.Package, opts.ArtifactName, opts.OS, opts.Arch, manifest.Package.Version, opts.ABI, "zip")
+	outPath := filepath.Join(cfg.OutputDir, packageName)
+
+	f, err := os.Create(outPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	zw := zip.NewWriter(f)
+	defer zw.Close()
+
+	binaryPath := filepath.Join(cfg.OutputDir, finalBinaryName)
+	return e.addFileToZip(zw, binaryPath, finalBinaryName)
+}
+
+func (e *RustEngine) addFileToTar(tw *tar.Writer, path, name string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	header, err := tar.FileInfoHeader(stat, "")
+	if err != nil {
+		return err
+	}
+	header.Name = name
+
+	if err := tw.WriteHeader(header); err != nil {
+		return err
+	}
+
+	_, err = io.Copy(tw, file)
+	return err
+}
+
+func (e *RustEngine) addFileToZip(zw *zip.Writer, path, name string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	w, err := zw.Create(name)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(w, file)
+	return err
+}
+
+func (e *RustEngine) runHook(hook string) error {
+	parts := strings.Fields(hook)
+	if len(parts) == 0 {
+		return nil
+	}
+	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func (e *RustEngine) loadManifest() (*cargoManifest, error) {
@@ -180,7 +346,7 @@ func (e *RustEngine) resolveTarget(opts BuildOptions) string {
 	}
 }
 
-func (e *RustEngine) setupEnvironment(art *config.ArtifactConfig, opts BuildOptions, target string) error {
+func (e *RustEngine) getBestMatch(art *config.ArtifactConfig, opts BuildOptions) *config.TargetConfig {
 	var bestMatch *config.TargetConfig
 	for _, tCfg := range art.Targets {
 		if tCfg.OS == opts.OS && e.sliceContains(tCfg.Archs, opts.Arch) {
@@ -195,30 +361,49 @@ func (e *RustEngine) setupEnvironment(art *config.ArtifactConfig, opts BuildOpti
 			}
 		}
 	}
+	return bestMatch
+}
 
+func (e *RustEngine) setupEnvironment(art *config.ArtifactConfig, opts BuildOptions, target string) error {
+	bestMatch := e.getBestMatch(art, opts)
+
+	linker := ""
 	if bestMatch != nil {
-		if linker, ok := bestMatch.LangOpts["linker"].(string); ok {
-			isArmLinker := strings.Contains(linker, "aarch64") || strings.Contains(linker, "arm")
-			isArmTarget := strings.Contains(opts.Arch, "aarch64") || strings.Contains(opts.Arch, "arm")
-			isX64Linker := strings.Contains(linker, "x86_64") || strings.Contains(linker, "x64")
-			isX64Target := strings.Contains(opts.Arch, "x86_64") || strings.Contains(opts.Arch, "x64")
-
-			shouldApply := true
-			if (isArmLinker && !isArmTarget) || (isX64Linker && !isX64Target) {
-				shouldApply = false
-			}
-
-			if shouldApply {
-				envKey := fmt.Sprintf("CARGO_TARGET_%s_LINKER",
-					strings.ReplaceAll(strings.ReplaceAll(strings.ToUpper(target), "-", "_"), ".", "_"))
-				os.Setenv(envKey, linker)
-			}
+		if l, ok := bestMatch.LangOpts["linker"].(string); ok {
+			linker = l
 		}
+
 		if depTarget, ok := bestMatch.LangOpts["deployment_target"].(string); ok {
 			os.Setenv("MACOSX_DEPLOYMENT_TARGET", depTarget)
 		}
 		if sdk, ok := bestMatch.LangOpts["sdk_root"].(string); ok {
 			os.Setenv("SDKROOT", sdk)
+		}
+	}
+
+	if linker == "" && opts.OS == "linux" {
+		if strings.Contains(opts.Arch, "aarch64") {
+			linker = "aarch64-linux-gnu-gcc"
+		} else if strings.Contains(opts.Arch, "i686") {
+			linker = "i686-linux-gnu-gcc"
+		}
+	}
+
+	if linker != "" {
+		isArmLinker := strings.Contains(linker, "aarch64") || strings.Contains(linker, "arm")
+		isArmTarget := strings.Contains(opts.Arch, "aarch64") || strings.Contains(opts.Arch, "arm")
+		isX64Linker := strings.Contains(linker, "x86_64") || strings.Contains(linker, "x64")
+		isX64Target := strings.Contains(opts.Arch, "x86_64") || strings.Contains(opts.Arch, "x64")
+
+		shouldApply := true
+		if (isArmLinker && !isArmTarget) || (isX64Linker && !isX64Target) {
+			shouldApply = false
+		}
+
+		if shouldApply {
+			envKey := fmt.Sprintf("CARGO_TARGET_%s_LINKER",
+				strings.ReplaceAll(strings.ReplaceAll(strings.ToUpper(target), "-", "_"), ".", "_"))
+			os.Setenv(envKey, linker)
 		}
 	}
 
@@ -239,6 +424,41 @@ func (e *RustEngine) runCargoBuild(art *config.ArtifactConfig, opts BuildOptions
 	args := []string{"build", "--target", target}
 	if profile == "release" {
 		args = append(args, "--release")
+	} else if profile != "debug" && profile != "" {
+		args = append(args, "--profile", profile)
+	}
+
+	bestMatch := e.getBestMatch(art, opts)
+
+	if bestMatch != nil {
+		if features, ok := bestMatch.LangOpts["features"].([]any); ok {
+			for _, f := range features {
+				if fs, ok := f.(string); ok {
+					args = append(args, "--features", fs)
+				}
+			}
+		}
+		if features, ok := bestMatch.LangOpts["features"].(string); ok {
+			args = append(args, "--features", features)
+		}
+
+		if tags, ok := bestMatch.LangOpts["tags"].([]any); ok {
+			for _, t := range tags {
+				if ts, ok := t.(string); ok {
+					args = append(args, "--features", ts)
+				}
+			}
+		}
+		if tags, ok := bestMatch.LangOpts["tags"].(string); ok {
+			args = append(args, "--features", tags)
+		}
+
+		if all, ok := bestMatch.LangOpts["all-features"].(bool); ok && all {
+			args = append(args, "--all-features")
+		}
+		if noDefault, ok := bestMatch.LangOpts["no-default-features"].(bool); ok && noDefault {
+			args = append(args, "--no-default-features")
+		}
 	}
 
 	if art.Type == "lib" {
@@ -254,21 +474,33 @@ func (e *RustEngine) runCargoBuild(art *config.ArtifactConfig, opts BuildOptions
 	return cmd.Run()
 }
 
-func (e *RustEngine) moveArtifacts(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, target, version, profile string) error {
-	formats := art.Formats
-	if len(formats) == 0 {
-		if art.Type == "bin" {
-			formats = []string{"bin"}
-		} else {
-			formats = []string{"cdylib"}
+func (e *RustEngine) moveArtifacts(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, target, version, profile string, manifest *cargoManifest) error {
+	var buildTypes []string
+	if art.Type == "bin" {
+		buildTypes = []string{"bin"}
+	} else {
+		buildTypes = art.LibraryTypes
+		if len(buildTypes) == 0 {
+			buildTypes = []string{"cdylib"}
 		}
 	}
 
 	movedCount := 0
-	for _, f := range formats {
-		ext, prefix := e.getExtAndPrefix(opts.OS, art.Type, f)
+	cargoProfileDir := profile
+	if profile == "debug" {
+		cargoProfileDir = "debug"
+	} else if profile == "release" {
+		cargoProfileDir = "release"
+	}
+
+	for _, bt := range buildTypes {
+		ext, prefix := e.getExtAndPrefix(opts.OS, art.Type, bt)
 		finalName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, version, opts.ABI, ext)
+
 		realSrcName := opts.ArtifactName
+		if art.Type == "lib" && manifest.Lib != nil && manifest.Lib.Name != "" {
+			realSrcName = manifest.Lib.Name
+		}
 
 		if prefix != "" && !strings.HasPrefix(realSrcName, prefix) {
 			realSrcName = prefix + realSrcName
@@ -277,7 +509,7 @@ func (e *RustEngine) moveArtifacts(cfg *config.Config, art *config.ArtifactConfi
 			realSrcName += "." + ext
 		}
 
-		srcPath := filepath.Join("target", target, profile, realSrcName)
+		srcPath := filepath.Join("target", target, cargoProfileDir, realSrcName)
 		distPath := filepath.Join(cfg.OutputDir, finalName)
 
 		if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {

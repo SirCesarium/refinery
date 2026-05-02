@@ -19,7 +19,7 @@ var (
 
 var buildCmd = &cobra.Command{
 	Use:   "build",
-	Short: "Build an artifact based on configuration",
+	Short: "Build and package an artifact based on configuration",
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg, err := config.Load("refinery.toml")
 		if err != nil {
@@ -52,7 +52,15 @@ var buildCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		fmt.Println("Build completed successfully")
+		for _, format := range art.Packages {
+			fmt.Printf("Packaging as %s...\n", format)
+			if err := eng.Package(cfg, art, opts, format); err != nil {
+				fmt.Fprintf(os.Stderr, "Packaging failed for %s: %v\n", format, err)
+				os.Exit(1)
+			}
+		}
+
+		fmt.Println("Build and packaging completed successfully")
 	},
 }
 

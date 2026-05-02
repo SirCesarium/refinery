@@ -11,19 +11,13 @@ type BuildOptions struct {
 	ABI          string
 }
 
-type CIStep struct {
-	Name string
-	Run  string
-	Uses string
-	With map[string]any
-}
-
 type BuildEngine interface {
 	ID() string
 	Prepare(cfg *config.Config) error
 	Validate(cfg *config.Config) error
 	Build(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions) error
 	GetCIRequirements(cfg *config.Config) []string
+	Package(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, format string) error
 }
 
 type EngineRegistry struct {
