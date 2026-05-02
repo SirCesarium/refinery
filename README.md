@@ -120,7 +120,7 @@ lang = "rust"
 author = "Name"
 license = "MIT"
 
-[artifacts.my_app]
+[artifacts.my_app] # This name MUST match the binary name in your Cargo.toml
 type = "bin"
 source = "src/main.rs"
 packages = ["deb", "tar.gz"]
@@ -130,7 +130,7 @@ os = "linux"
 archs = ["aarch64"]
 abis = ["gnu", "musl"]
 
-[artifacts.my_app_lib]
+[artifacts.my_app_lib] # This name MUST match the library name in your Cargo.toml
 type = "lib"
 library_types = ["cdylib", "staticlib"]
 packages = ["zip"]
