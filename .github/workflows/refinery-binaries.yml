@@ -56,9 +56,31 @@ jobs:
           name: refinery-${{ matrix.os }}-${{ matrix.arch }}
           path: bin/refinery-*
 
+  smoke-test:
+    name: Smoke Test
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: 'stable'
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: refinery-linux-amd64
+          path: bin
+      - name: Run Smoke Test
+        run: |
+          chmod +x bin/refinery-linux-amd64
+          ./scripts/smoke-test.sh ./bin/refinery-linux-amd64
+
   release:
     name: Create Release
-    needs: build
+    needs: [build, smoke-test]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:

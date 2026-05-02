@@ -1,0 +1,39 @@
+refinery_version = "latest"
+
+[project]
+name = "smoke-test"
+lang = "rust"
+
+[naming]
+binary = "{artifact}"
+package = "{artifact}-{version}.{ext}"
+
+[artifacts.smoke-bin]
+type = "bin"
+source = "smoke-bin"
+packages = ["tar.gz"]
+[artifacts.smoke-bin.targets.linux]
+os = "linux"
+archs = ["x86_64", "aarch64"]
+[artifacts.smoke-bin.targets.darwin]
+os = "darwin"
+archs = ["x86_64", "aarch64"]
+[artifacts.smoke-bin.targets.windows]
+os = "windows"
+archs = ["x86_64"]
+
+[artifacts.smoke-lib]
+type = "lib"
+source = "smoke-lib"
+library_types = ["cdylib", "staticlib"]
+packages = ["zip"]
+headers = true
+[artifacts.smoke-lib.targets.linux]
+os = "linux"
+archs = ["x86_64", "aarch64"]
+[artifacts.smoke-lib.targets.darwin]
+os = "darwin"
+archs = ["x86_64", "aarch64"]
+[artifacts.smoke-lib.targets.windows]
+os = "windows"
+archs = ["x86_64"]

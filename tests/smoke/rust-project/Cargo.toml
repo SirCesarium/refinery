@@ -1,0 +1,17 @@
+[package]
+name = "smoke-test"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+[build-dependencies]
+cbindgen = "0.26"
+
+[lib]
+name = "smoke_lib"
+crate-type = ["cdylib", "staticlib"]
+
+[[bin]]
+name = "smoke-bin"
+path = "src/main.rs"
