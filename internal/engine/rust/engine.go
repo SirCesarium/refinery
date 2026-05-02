@@ -81,7 +81,12 @@ func (e *RustEngine) GetCIRequirements(cfg *config.Config) []string {
 				reqs = append(reqs, "pkg:musl-tools")
 			}
 		}
-		for _, p := range art.Packages {
+
+		formats := append([]string{}, art.Packages...)
+		for _, tCfg := range art.Targets {
+			formats = append(formats, tCfg.Packages...)
+		}
+		for _, p := range e.uniqueFormats(formats) {
 			switch p {
 			case "deb":
 				reqs = append(reqs, "pkg:cargo-deb")
@@ -93,6 +98,19 @@ func (e *RustEngine) GetCIRequirements(cfg *config.Config) []string {
 		}
 	}
 	return reqs
+}
+
+func (e *RustEngine) uniqueFormats(values []string) []string {
+	seen := map[string]bool{}
+	unique := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		unique = append(unique, value)
+	}
+	return unique
 }
 
 func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts engine.BuildOptions) error {

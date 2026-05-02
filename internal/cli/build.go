@@ -50,9 +50,10 @@ var buildCmd = &cobra.Command{
 		}
 		ui.Success("Build completed successfully")
 
-		if len(art.Packages) > 0 {
+		packageFormats := mergePackages(art.Packages, findTargetPackages(art, osName, arch, abi))
+		if len(packageFormats) > 0 {
 			ui.Section("Packaging")
-			for _, format := range art.Packages {
+			for _, format := range packageFormats {
 				ui.Info("Packaging as %s...", format)
 				if err := eng.Package(cfg, art, opts, format); err != nil {
 					ui.Fatal(err, "Packaging failed for "+format+". Ensure you have the necessary packager tools installed.")
@@ -77,4 +78,49 @@ func init() {
 	buildCmd.MarkFlagRequired("arch")
 
 	rootCmd.AddCommand(buildCmd)
+}
+
+func mergePackages(global, target []string) []string {
+	merged := make([]string, 0, len(global)+len(target))
+	seen := map[string]bool{}
+	for _, p := range global {
+		if p == "" || seen[p] {
+			continue
+		}
+		seen[p] = true
+		merged = append(merged, p)
+	}
+	for _, p := range target {
+		if p == "" || seen[p] {
+			continue
+		}
+		seen[p] = true
+		merged = append(merged, p)
+	}
+	return merged
+}
+
+func findTargetPackages(art *config.ArtifactConfig, osName, arch, abi string) []string {
+	for _, tCfg := range art.Targets {
+		if tCfg.OS != osName {
+			continue
+		}
+		if !contains(tCfg.Archs, arch) {
+			continue
+		}
+		if abi != "" && len(tCfg.ABIs) > 0 && !contains(tCfg.ABIs, abi) {
+			continue
+		}
+		return tCfg.Packages
+	}
+	return nil
+}
+
+func contains(slice []string, val string) bool {
+	for _, item := range slice {
+		if item == val {
+			return true
+		}
+	}
+	return false
 }
