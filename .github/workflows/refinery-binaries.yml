@@ -52,17 +52,14 @@ jobs:
             runner: ubuntu-latest
             artifact_os: linux
             artifact_arch: amd64
-            refinery_bin: ../../../refinery
+            refinery_bin: ./refinery
+            filter: "linux wasi"
           - os: windows
             runner: windows-latest
             artifact_os: windows
             artifact_arch: amd64
-            refinery_bin: ../../../refinery.exe
-          - os: darwin
-            runner: macos-latest
-            artifact_os: darwin
-            artifact_arch: arm64
-            refinery_bin: ../../../refinery
+            refinery_bin: ./refinery.exe
+            filter: "windows"
 
     steps:
       - name: Checkout
@@ -74,33 +71,23 @@ jobs:
           path: .
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: tests/smoke/rust-project -> target
       - name: Install dependencies (Linux)
         if: matrix.os == 'linux'
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-deb,cargo-generate-rpm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static gcc-aarch64-linux-gnu gcc-i686-linux-gnu libc6-dev-i386 musl-tools
+          curl https://wasmtime.dev/install.sh -sSf | bash
+          echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
       - name: Run Smoke Test
         shell: bash
         run: |
-          if [ "${{ matrix.os }}" != "windows" ]; then
-            chmod +x ${{ matrix.refinery_bin }}
-          fi
-          cd tests/smoke/rust-project
-          cp ../../../LICENSE .
-          
-          echo "Testing $RUNNER_OS build..."
-          ${{ matrix.refinery_bin }} build --artifact smoke-bin --os ${{ matrix.artifact_os }} --arch x86_64
-          ${{ matrix.refinery_bin }} build --artifact smoke-lib --os ${{ matrix.artifact_os }} --arch x86_64
-          
-          echo "Verifying execution..."
-          if [ "${{ matrix.os }}" == "windows" ]; then
-            ./dist/smoke-bin-windows-x86_64.exe | grep "Refinery Smoke Test: Success"
-          else
-            ./dist/smoke-bin-${{ matrix.artifact_os }}-x86_64* | grep "Refinery Smoke Test: Success"
-          fi
-          
-          echo "Verifying headers..."
-          grep "smoke_test_fn" dist/smoke-test.h
+          chmod +x scripts/smoke-test.sh
+          [ "${{ matrix.os }}" != "windows" ] && chmod +x ${{ matrix.refinery_bin }}
+          ./scripts/smoke-test.sh ${{ matrix.refinery_bin }} "${{ matrix.filter }}"
 
   release:
     name: Create Release

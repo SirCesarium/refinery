@@ -2,13 +2,13 @@
 set -e
 
 REFINERY_BIN=$(realpath "$1")
+FILTER_OS="$2"
 [ -f "$REFINERY_BIN" ] || (echo "Refinery bin not found" && exit 1)
 
 cd tests/smoke/rust-project
 rm -rf dist logs
 mkdir -p logs
 
-# Build targets
 declare -A TARGETS
 TARGETS["linux"]="x86_64:gnu x86_64:musl i686:gnu aarch64:gnu"
 TARGETS["windows"]="x86_64:gnu i686:gnu"
@@ -19,6 +19,9 @@ LOGS=()
 NAMES=()
 
 for os in "${!TARGETS[@]}"; do
+    if [ -n "$FILTER_OS" ] && [[ "$FILTER_OS" != *"$os"* ]]; then
+        continue
+    fi
     for arch_abi in ${TARGETS[$os]}; do
         arch=$(echo $arch_abi | cut -d: -f1)
         abi=$(echo $arch_abi | cut -d: -f2 -s)

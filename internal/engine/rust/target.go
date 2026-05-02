@@ -11,11 +11,10 @@ func (e *RustEngine) resolveTarget(opts config.TargetConfig, arch, abi string) s
 	case "darwin":
 		return fmt.Sprintf("%s-apple-darwin", arch)
 	case "windows":
-		triple := fmt.Sprintf("%s-pc-windows", arch)
-		if abi != "" {
-			triple = fmt.Sprintf("%s-%s", triple, abi)
+		if abi == "" {
+			abi = "msvc"
 		}
-		return triple
+		return fmt.Sprintf("%s-pc-windows-%s", arch, abi)
 	case "wasm":
 		return "wasm32-unknown-unknown"
 	case "wasi":
