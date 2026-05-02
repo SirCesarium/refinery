@@ -11,7 +11,11 @@ mkdir -p logs
 
 declare -A TARGETS
 TARGETS["linux"]="x86_64:gnu x86_64:musl i686:gnu aarch64:gnu"
-TARGETS["windows"]="x86_64:msvc i686:msvc"
+if [[ "$(uname -s)" == "MINGW"* || "$(uname -s)" == "CYGWIN"* || "$(uname -s)" == "MSYS"* ]]; then
+    TARGETS["windows"]="x86_64:msvc i686:msvc"
+else
+    TARGETS["windows"]="x86_64:gnu i686:gnu"
+fi
 TARGETS["wasi"]="wasm32"
 
 PIDS=()
