@@ -8,7 +8,7 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "refinery",
-	Short: "Universal artifact orchestrator",
+	Short: "Multi-ecosystem artifact orchestrator",
 }
 
 func Execute() {

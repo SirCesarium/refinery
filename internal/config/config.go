@@ -21,7 +21,6 @@ type Config struct {
 type Project struct {
 	Name        string `toml:"name" mapstructure:"name"`
 	Lang        string `toml:"lang" mapstructure:"lang"`
-	Version     string `toml:"version,omitempty" mapstructure:"version"`
 	Description string `toml:"description,omitempty" mapstructure:"description"`
 	Author      string `toml:"author,omitempty" mapstructure:"author"`
 	License     string `toml:"license,omitempty" mapstructure:"license"`

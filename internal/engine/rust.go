@@ -216,9 +216,6 @@ func (e *RustEngine) runCargoPackager(command string, args []string) error {
 }
 
 func (e *RustEngine) createTarGz(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, manifest *cargoManifest) error {
-	ext, _ := e.getExtAndPrefix(opts.OS, art.Type, "cdylib")
-	finalBinaryName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, manifest.Package.Version, opts.ABI, ext)
-
 	packageName := cfg.Naming.Resolve(cfg.Naming.Package, opts.ArtifactName, opts.OS, opts.Arch, manifest.Package.Version, opts.ABI, "tar.gz")
 	outPath := filepath.Join(cfg.OutputDir, packageName)
 
@@ -233,14 +230,10 @@ func (e *RustEngine) createTarGz(cfg *config.Config, art *config.ArtifactConfig,
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
 
-	binaryPath := filepath.Join(cfg.OutputDir, finalBinaryName)
-	return e.addFileToTar(tw, binaryPath, finalBinaryName)
+	return e.archiveArtifactFiles(tw, nil, cfg, art, opts, manifest)
 }
 
 func (e *RustEngine) createZip(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, manifest *cargoManifest) error {
-	ext, _ := e.getExtAndPrefix(opts.OS, art.Type, "cdylib")
-	finalBinaryName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, manifest.Package.Version, opts.ABI, ext)
-
 	packageName := cfg.Naming.Resolve(cfg.Naming.Package, opts.ArtifactName, opts.OS, opts.Arch, manifest.Package.Version, opts.ABI, "zip")
 	outPath := filepath.Join(cfg.OutputDir, packageName)
 
@@ -253,8 +246,52 @@ func (e *RustEngine) createZip(cfg *config.Config, art *config.ArtifactConfig, o
 	zw := zip.NewWriter(f)
 	defer zw.Close()
 
-	binaryPath := filepath.Join(cfg.OutputDir, finalBinaryName)
-	return e.addFileToZip(zw, binaryPath, finalBinaryName)
+	return e.archiveArtifactFiles(nil, zw, cfg, art, opts, manifest)
+}
+
+func (e *RustEngine) archiveArtifactFiles(tw *tar.Writer, zw *zip.Writer, cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, manifest *cargoManifest) error {
+	var buildTypes []string
+	if art.Type == "bin" {
+		buildTypes = []string{"bin"}
+	} else {
+		buildTypes = art.LibraryTypes
+		if len(buildTypes) == 0 {
+			buildTypes = []string{"cdylib"}
+		}
+	}
+
+	for _, bt := range buildTypes {
+		ext, _ := e.getExtAndPrefix(opts.OS, art.Type, bt)
+		finalName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, manifest.Package.Version, opts.ABI, ext)
+		filePath := filepath.Join(cfg.OutputDir, finalName)
+
+		if _, err := os.Stat(filePath); err == nil {
+			if tw != nil {
+				if err := e.addFileToTar(tw, filePath, finalName); err != nil {
+					return err
+				}
+			} else {
+				if err := e.addFileToZip(zw, filePath, finalName); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	if art.Headers {
+		headers, _ := filepath.Glob("*.h")
+		headers2, _ := filepath.Glob("*.hpp")
+		headers = append(headers, headers2...)
+		for _, h := range headers {
+			if tw != nil {
+				e.addFileToTar(tw, h, h)
+			} else {
+				e.addFileToZip(zw, h, h)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (e *RustEngine) addFileToTar(tw *tar.Writer, path, name string) error {
@@ -487,9 +524,10 @@ func (e *RustEngine) moveArtifacts(cfg *config.Config, art *config.ArtifactConfi
 
 	movedCount := 0
 	cargoProfileDir := profile
-	if profile == "debug" {
+	switch profile {
+	case "debug":
 		cargoProfileDir = "debug"
-	} else if profile == "release" {
+	case "release":
 		cargoProfileDir = "release"
 	}
 
