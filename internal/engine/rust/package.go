@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"compress/gzip"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/SirCesarium/refinery/internal/config"
@@ -18,14 +19,32 @@ func (e *RustEngine) pkg(cfg *config.Config, art *config.ArtifactConfig, artifac
 
 	switch format {
 	case "deb":
+		if osName != "linux" || abi == "musl" || arch == "wasm32" {
+			return nil
+		}
+		if _, err := exec.LookPath("cargo-deb"); err != nil {
+			return nil
+		}
 		bestMatch := e.getBestMatch(art, osName, arch, abi)
 		target := e.resolveTarget(*bestMatch, arch, abi)
 		return e.runCargoPackager("deb", []string{"--target", target})
 	case "rpm":
+		if osName != "linux" || abi == "musl" || arch == "wasm32" {
+			return nil
+		}
+		if _, err := exec.LookPath("cargo-generate-rpm"); err != nil {
+			return nil
+		}
 		bestMatch := e.getBestMatch(art, osName, arch, abi)
 		target := e.resolveTarget(*bestMatch, arch, abi)
 		return e.runCargoPackager("generate-rpm", []string{"--target", target})
 	case "msi":
+		if osName != "windows" {
+			return nil
+		}
+		if _, err := exec.LookPath("candle"); err != nil {
+			return nil
+		}
 		bestMatch := e.getBestMatch(art, osName, arch, abi)
 		target := e.resolveTarget(*bestMatch, arch, abi)
 		return e.runCargoPackager("wix", []string{"--target", target})

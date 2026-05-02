@@ -15,68 +15,86 @@ jobs:
           - os: linux
             arch: amd64
             runner: ubuntu-latest
-          - os: linux
-            arch: arm64
-            runner: ubuntu-latest
-          - os: darwin
-            arch: amd64
-            runner: macos-latest
-          - os: darwin
-            arch: arm64
-            runner: macos-latest
           - os: windows
             arch: amd64
             runner: windows-latest
+          - os: darwin
+            arch: arm64
+            runner: macos-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
           go-version: 'stable'
-          cache: true
-
       - name: Build
-        shell: bash
-        env:
-          GOOS: ${{ matrix.os }}
-          GOARCH: ${{ matrix.arch }}
         run: |
-          BINARY_NAME="refinery-${{ matrix.os }}-${{ matrix.arch }}"
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            BINARY_NAME="${BINARY_NAME}.exe"
-          fi
-          go build -v -o "bin/${BINARY_NAME}" ./cmd/refinery/main.go
-
+          mkdir -p bin
+          go build -o bin/refinery ./cmd/refinery/main.go
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
         with:
           name: refinery-${{ matrix.os }}-${{ matrix.arch }}
-          path: bin/refinery-*
+          path: bin/refinery*
 
   smoke-test:
-    name: Smoke Test
+    name: Smoke Test (${{ matrix.os }})
     needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ${{ matrix.runner }}
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            runner: ubuntu-latest
+            artifact_os: linux
+            artifact_arch: amd64
+            refinery_bin: ./bin/refinery
+          - os: windows
+            runner: windows-latest
+            artifact_os: windows
+            artifact_arch: amd64
+            refinery_bin: ./bin/refinery.exe
+          - os: darwin
+            runner: macos-latest
+            artifact_os: darwin
+            artifact_arch: arm64
+            refinery_bin: ./bin/refinery
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: 'stable'
-      - name: Download Linux Artifact
+      - name: Download Refinery
         uses: actions/download-artifact@v8
         with:
-          name: refinery-linux-amd64
+          name: refinery-${{ matrix.artifact_os }}-${{ matrix.artifact_arch }}
           path: bin
-      - name: Run Smoke Test
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies (Linux)
+        if: matrix.os == 'linux'
         run: |
-          chmod +x bin/refinery-linux-amd64
-          ./scripts/smoke-test.sh ./bin/refinery-linux-amd64
+          sudo apt-get update && sudo apt-get install -y cargo-deb cargo-generate-rpm
+      - name: Run Smoke Test
+        shell: bash
+        run: |
+          chmod +x ${{ matrix.refinery_bin }}
+          cd tests/smoke/rust-project
+          cp ../../../LICENSE .
+          cp ../../../LICENSE.rtf .
+          
+          echo "Testing $RUNNER_OS build..."
+          ${{ matrix.refinery_bin }} build --artifact smoke-bin --os ${{ matrix.artifact_os }} --arch x86_64
+          ${{ matrix.refinery_bin }} build --artifact smoke-lib --os ${{ matrix.artifact_os }} --arch x86_64
+          
+          echo "Verifying execution..."
+          ./dist/smoke-bin* | grep "Refinery Smoke Test: Success"
+          
+          echo "Verifying headers..."
+          grep "smoke_test_fn" dist/smoke-test.h
 
   release:
     name: Create Release
@@ -91,7 +109,6 @@ jobs:
         with:
           path: ./artifacts
           merge-multiple: true
-
       - name: Release
         uses: softprops/action-gh-release@v3
         with:

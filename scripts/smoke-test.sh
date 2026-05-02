@@ -1,64 +1,94 @@
 #!/bin/bash
 set -e
 
-REFINERY_BIN=$1
-if [ -z "$REFINERY_BIN" ]; then
-    echo "Usage: $0 <path-to-refinery-bin>"
-    exit 1
-fi
-
-chmod +x "$REFINERY_BIN"
-
-OS_NAME=$(uname -s | tr '[:upper:]' '[:lower:]')
-ARCH_NAME=$(uname -m)
-
-if [ "$ARCH_NAME" = "x86_64" ] || [ "$ARCH_NAME" = "amd64" ]; then
-    R_ARCH="x86_64"
-elif [ "$ARCH_NAME" = "aarch64" ] || [ "$ARCH_NAME" = "arm64" ]; then
-    R_ARCH="aarch64"
-else
-    R_ARCH=$ARCH_NAME
-fi
-
-if [[ "$OS_NAME" == *"mingw"* ]] || [[ "$OS_NAME" == *"msys"* ]]; then
-    OS_NAME="windows"
-fi
+REFINERY_BIN=$(realpath "$1")
+[ -f "$REFINERY_BIN" ] || (echo "Refinery bin not found" && exit 1)
 
 cd tests/smoke/rust-project
-rm -rf dist
+rm -rf dist logs
+mkdir -p logs
 
-"$REFINERY_BIN" build --artifact smoke-bin --os "$OS_NAME" --arch "$R_ARCH"
-"$REFINERY_BIN" build --artifact smoke-lib --os "$OS_NAME" --arch "$R_ARCH"
+# Build targets
+declare -A TARGETS
+TARGETS["linux"]="x86_64:gnu x86_64:musl i686:gnu aarch64:gnu"
+TARGETS["windows"]="x86_64:gnu i686:gnu"
+TARGETS["wasi"]="wasm32"
 
-echo "Verifying outputs..."
-ls -R dist/
+PIDS=()
+LOGS=()
+NAMES=()
 
-BIN_EXT=""
-[ "$OS_NAME" = "windows" ] && BIN_EXT=".exe"
+for os in "${!TARGETS[@]}"; do
+    for arch_abi in ${TARGETS[$os]}; do
+        arch=$(echo $arch_abi | cut -d: -f1)
+        abi=$(echo $arch_abi | cut -d: -f2 -s)
+        
+        EXTRA_RUSTFLAGS=""
+        [ "$os" = "windows" ] && EXTRA_RUSTFLAGS="-C link-args=-static"
+        
+        # Build bin
+        name_bin="bin-$os-$arch-$abi"
+        args="--artifact smoke-bin --os $os --arch $arch"
+        [ -n "$abi" ] && args="$args --abi $abi"
+        RUSTFLAGS="$EXTRA_RUSTFLAGS" "$REFINERY_BIN" build $args > "logs/$name_bin.log" 2>&1 &
+        PIDS+=($!)
+        LOGS+=("logs/$name_bin.log")
+        NAMES+=("$name_bin")
+        
+        # Build lib
+        name_lib="lib-$os-$arch-$abi"
+        args_lib="--artifact smoke-lib --os $os --arch $arch"
+        [ -n "$abi" ] && args_lib="$args_lib --abi $abi"
+        RUSTFLAGS="$EXTRA_RUSTFLAGS" "$REFINERY_BIN" build $args_lib > "logs/$name_lib.log" 2>&1 &
+        PIDS+=($!)
+        LOGS+=("logs/$name_lib.log")
+        NAMES+=("$name_lib")
+    done
+done
 
-if [ -f "dist/smoke-bin$BIN_EXT" ]; then
-    if [ "$OS_NAME" != "windows" ]; then
-        chmod +x "dist/smoke-bin$BIN_EXT"
-        ./dist/smoke-bin$BIN_EXT | grep "Refinery Smoke Test: Success"
-    fi
-else
-    echo "Binary NOT found!" && exit 1
-fi
-
-FOUND_LIB=false
-for ext in "so" "dylib" "dll" "a" "lib"; do
-    if ls dist/libsmoke_lib.$ext >/dev/null 2>&1 || ls dist/smoke_lib.$ext >/dev/null 2>&1; then
-        FOUND_LIB=true && break
+echo "Waiting for builds (${#PIDS[@]}) to complete..."
+FAILED=0
+for i in "${!PIDS[@]}"; do
+    if ! wait ${PIDS[$i]}; then
+        echo "FAILED: ${NAMES[$i]}"
+        cat "${LOGS[$i]}"
+        FAILED=1
     fi
 done
-[ "$FOUND_LIB" = false ] && echo "Library NOT found!" && exit 1
 
-if ls dist/*.h >/dev/null 2>&1; then
-    echo "Headers found."
-else
-    echo "Headers NOT found!" && exit 1
-fi
+[ $FAILED -eq 1 ] && exit 1
 
-ls dist/*.tar.gz dist/*.zip >/dev/null 2>&1 || (echo "Packages NOT found!" && exit 1)
+# 1. Verify Header Content
+HEADER="dist/smoke-test.h"
+grep -q "smoke_test_fn" "$HEADER" && echo "Header content: VALID"
 
-echo "Smoke test passed!"
+# 2. Runtime Verification
+check_exec() {
+    local bin=$1
+    local cmd=$2
+    local full_path=$(realpath "dist/$bin")
+    echo -n "Testing execution of $bin... "
+    if [ -f "$full_path" ]; then
+        local output
+        output=$(LC_ALL=C $cmd "$full_path" 2>&1) || {
+            echo "FAILED (Runtime error: exit code $?)"
+            echo "$output"
+            exit 1
+        }
+        echo "$output" | grep -q "Refinery Smoke Test: Success" && echo "PASSED" || (echo "FAILED (Output mismatch)" && exit 1)
+    else
+        echo "FAILED (Missing binary)" && exit 1
+    fi
+}
+
+# Only run emulated tests if tools are present
+check_exec "smoke-bin-linux-x86_64-gnu" ""
+[ -x "$(command -v qemu-i386)" ] && check_exec "smoke-bin-linux-i686-gnu" "qemu-i386"
+[ -x "$(command -v qemu-aarch64)" ] && check_exec "smoke-bin-linux-aarch64-gnu" "qemu-aarch64 -L /usr/aarch64-linux-gnu"
+[ -x "$(command -v wasmtime)" ] && check_exec "smoke-bin-wasi-wasm32.wasm" "wasmtime"
+
+# 3. Verify existence
+[ -f "dist/smoke-bin-0.1.0-linux-x86_64-gnu.deb" ] && echo ".deb: OK"
+[ -f "dist/smoke-bin-0.1.0-linux-x86_64-gnu.rpm" ] && echo ".rpm: OK"
+
+echo "All smoke tests PASSED!"

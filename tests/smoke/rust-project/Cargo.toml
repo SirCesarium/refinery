@@ -2,11 +2,31 @@
 name = "smoke-test"
 version = "0.1.0"
 edition = "2024"
+description = "Refinery rigorous smoke test"
+license = "MIT"
 
 [dependencies]
 
 [build-dependencies]
-cbindgen = "0.26"
+cbindgen = "0.29"
+
+[package.metadata.deb]
+maintainer = "Refinery Team <team@refinery.rs>"
+copyright = "2024, Refinery Team"
+license-file = ["LICENSE", "444"]
+extended-description = "A smoke test for refinery."
+section = "devel"
+priority = "optional"
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/smoke-bin", dest = "/usr/bin/smoke-bin", mode = "755" }
+]
+
+[package.metadata.wix]
+upgrade-guid = "B883A3D0-8B81-4EAB-719C-79EF1C419E3A"
+path-guid = "D38D79D9-2000-C302-55A5-089C4FE59C3B"
+license = "LICENSE.rtf"
 
 [lib]
 name = "smoke_lib"

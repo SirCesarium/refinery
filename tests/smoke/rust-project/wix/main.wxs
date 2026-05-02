@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='windows-1252'?>
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+    <Product
+        Id='*'
+        Name='smoke-test'
+        UpgradeCode='B883A3D0-8B81-4EAB-719C-79EF1C419E3A'
+        Manufacturer='Refinery Team'
+        Language='1033'
+        Codepage='1252'
+        Version='0.1.0'>
+        <Package Id='*' Keywords='Installer' Description='Smoke Test Installer' Manufacturer='Refinery Team' InstallerVersion='450' Languages='1033' Compressed='yes' SummaryCodepage='1252' />
+        <MajorUpgrade Schedule='afterInstallInitialize' DowngradeErrorMessage='A newer version of [ProductName] is already installed.' />
+        <Media Id='1' Cabinet='app.cab' EmbedCab='yes' />
+        <Directory Id='TARGETDIR' Name='SourceDir'>
+            <Directory Id='ProgramFiles64Folder'>
+                <Directory Id='APPLICATIONFOLDER' Name='smoke-test'>
+                    <Component Id='MainExecutable' Guid='*'>
+                        <File Id='smoke_bin_exe' Name='smoke-bin.exe' DiskId='1' Source='$(var.CargoTargetBinDir)\smoke-bin.exe' KeyPath='yes'/>
+                    </Component>
+                </Directory>
+            </Directory>
+        </Directory>
+        <Feature Id='MainApplication' Title='Main Application' Level='1'>
+            <ComponentRef Id='MainExecutable' />
+        </Feature>
+    </Product>
+</Wix>

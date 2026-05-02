@@ -2,6 +2,7 @@ package rust
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,15 +105,54 @@ func (e *RustEngine) moveArtifacts(cfg *config.Config, art *config.ArtifactConfi
 			continue
 		}
 
-		if err := os.Rename(srcPath, distPath); err != nil {
+		if err := moveFile(srcPath, distPath); err != nil {
 			return err
 		}
 		movedCount++
+	}
+
+	if art.Headers {
+		headers, _ := filepath.Glob("*.h")
+		headers2, _ := filepath.Glob("*.hpp")
+		headers = append(headers, headers2...)
+		for _, h := range headers {
+			dest := filepath.Join(cfg.OutputDir, h)
+			if err := copyFile(h, dest); err != nil {
+				return fmt.Errorf("failed to copy header %s: %w", h, err)
+			}
+		}
 	}
 
 	if movedCount == 0 {
 		return fmt.Errorf("no artifacts found for %s in %s", artifactName, target)
 	}
 	return nil
+}
+
+func moveFile(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+	if err := copyFile(src, dst); err != nil {
+		return err
+	}
+	return os.Remove(src)
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
 }
 

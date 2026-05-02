@@ -5,22 +5,31 @@ name = "smoke-test"
 lang = "rust"
 
 [naming]
-binary = "{artifact}"
-package = "{artifact}-{version}.{ext}"
+binary = "{artifact}-{os}-{arch}{abi}"
+package = "{artifact}-{version}-{os}-{arch}{abi}.{ext}"
 
 [artifacts.smoke-bin]
 type = "bin"
 source = "smoke-bin"
-packages = ["tar.gz"]
+packages = ["tar.gz", "deb", "rpm", "msi"]
+
 [artifacts.smoke-bin.targets.linux]
 os = "linux"
-archs = ["x86_64", "aarch64"]
+archs = ["x86_64", "i686", "aarch64"]
+abis = ["gnu", "musl"]
+
 [artifacts.smoke-bin.targets.darwin]
 os = "darwin"
 archs = ["x86_64", "aarch64"]
+
 [artifacts.smoke-bin.targets.windows]
 os = "windows"
-archs = ["x86_64"]
+archs = ["x86_64", "i686", "aarch64"]
+abis = ["gnu", "msvc"]
+
+[artifacts.smoke-bin.targets.wasi]
+os = "wasi"
+archs = ["wasm32"]
 
 [artifacts.smoke-lib]
 type = "lib"
@@ -28,12 +37,21 @@ source = "smoke-lib"
 library_types = ["cdylib", "staticlib"]
 packages = ["zip"]
 headers = true
+
 [artifacts.smoke-lib.targets.linux]
 os = "linux"
-archs = ["x86_64", "aarch64"]
+archs = ["x86_64", "i686", "aarch64"]
+abis = ["gnu", "musl"]
+
 [artifacts.smoke-lib.targets.darwin]
 os = "darwin"
 archs = ["x86_64", "aarch64"]
+
 [artifacts.smoke-lib.targets.windows]
 os = "windows"
-archs = ["x86_64"]
+archs = ["x86_64", "i686", "aarch64"]
+abis = ["gnu", "msvc"]
+
+[artifacts.smoke-lib.targets.wasi]
+os = "wasi"
+archs = ["wasm32"]

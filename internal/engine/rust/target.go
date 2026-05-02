@@ -38,9 +38,12 @@ func (e *RustEngine) getBestMatch(art *config.ArtifactConfig, osName, arch, abi 
 				bestMatch = &targetCopy
 				break
 			}
-			if abi == "" {
+			if abi == "" || (len(tCfg.ABIs) == 1 && tCfg.ABIs[0] == "") || len(tCfg.ABIs) == 0 {
 				targetCopy := tCfg
 				bestMatch = &targetCopy
+				if abi == "" {
+					break
+				}
 			}
 		}
 	}
