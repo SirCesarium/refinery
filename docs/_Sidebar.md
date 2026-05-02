@@ -1,5 +1,5 @@
 ### Documentation
-- [[Home|README]]
+- [[Home|Home]]
 - [[Getting Started|GETTING_STARTED]]
 - [[refinery.toml Guide|CONFIGURATION]]
 - [[Architectures & ABIs|ARCHITECTURES_AND_ABIS]]
