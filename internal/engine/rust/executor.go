@@ -21,6 +21,16 @@ func (e *RustEngine) runHook(hook string) error {
 }
 
 func (e *RustEngine) addTarget(target string) error {
+	out, err := exec.Command("rustup", "target", "list", "--installed").Output()
+	if err == nil {
+		installed := string(out)
+		for _, line := range strings.Split(installed, "\n") {
+			if strings.TrimSpace(line) == target {
+				return nil
+			}
+		}
+	}
+
 	cmd := exec.Command("rustup", "target", "add", target)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
