@@ -2,13 +2,14 @@ package app
 
 import (
 	"github.com/SirCesarium/refinery/internal/engine"
+	"github.com/SirCesarium/refinery/internal/engine/rust"
 	"github.com/SirCesarium/refinery/internal/pipeline"
 	"github.com/SirCesarium/refinery/internal/pipeline/github"
 )
 
 func NewDefaultEngineRegistry() *engine.EngineRegistry {
 	r := engine.NewRegistry()
-	r.Register(&engine.RustEngine{})
+	r.Register(&rust.RustEngine{})
 	return r
 }
 
