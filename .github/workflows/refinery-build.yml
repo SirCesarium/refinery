@@ -21,6 +21,14 @@ jobs:
                 include:
                     - arch: amd64
                       artifact: refinery
+                      os: windows
+                      runs_on: windows-latest
+                    - arch: "386"
+                      artifact: refinery
+                      os: windows
+                      runs_on: windows-latest
+                    - arch: amd64
+                      artifact: refinery
                       os: linux
                       runs_on: ubuntu-latest
                     - arch: arm64
@@ -31,14 +39,6 @@ jobs:
                       artifact: refinery
                       os: linux
                       runs_on: ubuntu-latest
-                    - arch: amd64
-                      artifact: refinery
-                      os: windows
-                      runs_on: windows-latest
-                    - arch: "386"
-                      artifact: refinery
-                      os: windows
-                      runs_on: windows-latest
                     - arch: amd64
                       artifact: refinery
                       os: darwin
@@ -50,13 +50,13 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@v6
-            - name: Download Local Refinery
-              uses: actions/download-artifact@v8
+            - name: Setup Go
+              uses: actions/setup-go@v6
               with:
-                name: refinery-local
-                path: .
-            - name: Prepare Local Refinery
-              run: chmod +x ./refinery-local
+                cache: true
+                go-version: 1.26.2
+            - name: Build Refinery from Source
+              run: go build -o ./refinery-local ./cmd/refinery
             - name: Build Artifact using Local Refinery
               run: ./refinery-local build --artifact ${{ matrix.artifact }} --os ${{ matrix.os }} --arch ${{ matrix.arch }}${{ matrix.abi != '' && format(' --abi {0}', matrix.abi) || '' }}
             - name: Internal Upload for Teardown
@@ -104,12 +104,6 @@ jobs:
               uses: ./.github/actions/smoke-test
               with:
                 refinery_bin: ./refinery-local
-            - name: Upload Local Refinery
-              uses: actions/upload-artifact@v7
-              with:
-                name: refinery-local
-                path: ./refinery-local
-                retention-days: 1
     teardown:
         name: Global Post-Build Tasks
         runs-on: ubuntu-latest

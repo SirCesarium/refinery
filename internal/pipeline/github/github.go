@@ -125,7 +125,7 @@ func (p *GithubProvider) getSplitSteps(eng engine.BuildEngine, cfg *config.Confi
 
 	// 2. Build Stage (Matrix)
 	build = append(build, Step{Name: "Checkout", Uses: ActionCheckout})
-	build = p.addCIRequirementSteps(build, eng, cfg) // Each runner needs its own toolchain
+	build = p.addCIRequirementSteps(build, eng, cfg)
 
 	if buildRefinery {
 		build = append(build, Step{
