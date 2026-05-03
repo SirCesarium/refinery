@@ -204,20 +204,13 @@ func TestGetSplitSteps(t *testing.T) {
 
 	// Check build steps
 	foundLocal := false
-	foundDownload := false
 	for _, s := range build {
 		if s.Name == "Pre-Build: other-test" {
 			foundLocal = true
 		}
-		if s.Name == "Download Local Refinery" {
-			foundDownload = true
-		}
 	}
 	if !foundLocal {
 		t.Error("expected matrix pre-build step in build")
-	}
-	if !foundDownload {
-		t.Error("expected refinery download step in build")
 	}
 
 	// Check teardown steps

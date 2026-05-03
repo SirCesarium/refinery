@@ -104,10 +104,12 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 }
 
 func (p *GithubProvider) getSplitSteps(eng engine.BuildEngine, cfg *config.Config) (setup, build, teardown []Step) {
+	buildRefinery := cfg.BuildRefinery != nil && cfg.BuildRefinery.Enabled
+
+	// 1. Setup Stage (Global Pre-Build / Smoke Test)
 	setup = append(setup, Step{Name: "Checkout", Uses: ActionCheckout})
 	setup = p.addCIRequirementSteps(setup, eng, cfg)
 
-	buildRefinery := cfg.BuildRefinery != nil && cfg.BuildRefinery.Enabled
 	if buildRefinery {
 		setup = append(setup, Step{
 			Name: "Build Refinery from Source",
@@ -121,23 +123,14 @@ func (p *GithubProvider) getSplitSteps(eng engine.BuildEngine, cfg *config.Confi
 		}
 	}
 
-	if buildRefinery {
-		setup = append(setup, Step{
-			Name: "Upload Local Refinery",
-			Uses: ActionUploadArtifact,
-			With: map[string]any{"name": "refinery-local", "path": "./refinery-local", "retention-days": 1},
-		})
-	}
-
+	// 2. Build Stage (Matrix)
 	build = append(build, Step{Name: "Checkout", Uses: ActionCheckout})
+	build = p.addCIRequirementSteps(build, eng, cfg) // Each runner needs its own toolchain
+
 	if buildRefinery {
 		build = append(build, Step{
-			Name: "Download Local Refinery",
-			Uses: ActionDownloadArtifact,
-			With: map[string]any{"name": "refinery-local", "path": "."},
-		})
-		build = append(build, Step{
-			Name: "Prepare Local Refinery", Run: "chmod +x ./refinery-local",
+			Name: "Build Refinery from Source",
+			Run:  "go build -o ./refinery-local ./cmd/refinery",
 		})
 	}
 
@@ -171,6 +164,7 @@ func (p *GithubProvider) getSplitSteps(eng engine.BuildEngine, cfg *config.Confi
 		}
 	}
 
+	// 3. Teardown Stage
 	if hasGlobalPost {
 		teardown = append(teardown, Step{Name: "Checkout", Uses: ActionCheckout})
 		teardown = append(teardown, Step{
