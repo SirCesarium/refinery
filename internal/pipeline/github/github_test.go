@@ -84,3 +84,138 @@ func TestBuildMatrix(t *testing.T) {
 		t.Errorf("expected os 'linux', got '%v'", include[0]["os"])
 	}
 }
+
+// TestNewProvider tests provider initialization.
+func TestNewProvider(t *testing.T) {
+	p, err := NewProvider(".github/workflows/build.yml")
+	if err != nil {
+		t.Fatalf("NewProvider returned error: %v", err)
+	}
+	if p == nil {
+		t.Fatal("expected non-nil provider")
+	}
+	if p.Name() != "github" {
+		t.Errorf("expected 'github', got '%s'", p.Name())
+	}
+}
+
+// TestProviderName tests Name method.
+func TestProviderName(t *testing.T) {
+	p, _ := NewProvider(".github/workflows/build.yml")
+	if p.Name() != "github" {
+		t.Errorf("expected 'github', got '%s'", p.Name())
+	}
+}
+
+// TestProviderFilename tests Filename method.
+func TestProviderFilename(t *testing.T) {
+	filename := "custom"
+	p, _ := NewProvider(filename)
+	expected := ".github/workflows/" + filename + ".yml"
+	if p.Filename() != expected {
+		t.Errorf("expected '%s', got '%s'", expected, p.Filename())
+	}
+}
+
+func TestProviderGenerate(t *testing.T) {
+	p, err := NewProvider("build")
+	if err != nil {
+		t.Fatalf("NewProvider returned error: %v", err)
+	}
+
+	cfg := &config.Config{
+		Project: config.Project{
+			Name: "test-project",
+			Lang: "rust",
+		},
+	}
+
+	mockEng := &mockBuildEngineForGithub{
+		requirements: []string{"rust"},
+	}
+
+	if _, err := p.Generate(cfg, mockEng); err != nil {
+		t.Errorf("Generate failed: %v", err)
+	}
+}
+
+func TestGetBuildSteps(t *testing.T) {
+	p, err := NewProvider("build")
+	if err != nil {
+		t.Fatalf("NewProvider returned error: %v", err)
+	}
+
+	mockEng := &mockBuildEngineForGithub{
+		requirements: []string{"rust"},
+	}
+	cfg := &config.Config{
+		Project: config.Project{
+			Name: "test-project",
+			Lang: "rust",
+		},
+	}
+
+	steps := p.getBuildSteps(mockEng, cfg)
+	if len(steps) == 0 {
+		t.Error("expected non-empty build steps")
+	}
+}
+
+func TestAddCIRequirementSteps(t *testing.T) {
+	p, err := NewProvider("build")
+	if err != nil {
+		t.Fatalf("NewProvider returned error: %v", err)
+	}
+
+	mockEng := &mockBuildEngineForGithub{
+		requirements: []string{"rust", "cargo-deb"},
+	}
+	cfg := &config.Config{
+		Project: config.Project{
+			Name: "test-project",
+			Lang: "rust",
+		},
+	}
+
+	steps := []Step{
+		{Name: "Checkout", Uses: "actions/checkout@v4"},
+	}
+
+	newSteps := p.addCIRequirementSteps(steps, mockEng, cfg)
+	if len(newSteps) <= len(steps) {
+		t.Error("expected more steps after adding CI requirements")
+	}
+}
+
+func TestGetBuildAndUploadSteps(t *testing.T) {
+	p, err := NewProvider("build")
+	if err != nil {
+		t.Fatalf("NewProvider returned error: %v", err)
+	}
+
+	mockEng := &mockBuildEngineForGithub{
+		requirements: []string{"rust"},
+	}
+	cfg := &config.Config{
+		Project: config.Project{
+			Name: "test-project",
+			Lang: "rust",
+		},
+		Artifacts: map[string]*config.ArtifactConfig{
+			"test": {
+				Type: "binary",
+				Targets: map[string]config.TargetConfig{
+					"linux-x64": {
+						OS:    "linux",
+						Archs: []string{"x86_64"},
+					},
+				},
+			},
+		},
+	}
+
+	steps := p.getBuildAndUploadSteps(mockEng, cfg)
+	if len(steps) == 0 {
+		t.Error("expected non-empty steps")
+	}
+}

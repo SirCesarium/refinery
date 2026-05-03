@@ -105,6 +105,9 @@ func init() {
 func validateRustEngine(eng interface{}, cfg *config.Config) error {
 	if rustEngine, ok := eng.(*rust.RustEngine); ok {
 		ui.Info("Running Rust-specific validation...")
+		if cfg == nil {
+			return fmt.Errorf("config is nil, cannot run Rust-specific validation")
+		}
 		return rustEngine.ValidateRustSpecific(cfg)
 	}
 	return nil

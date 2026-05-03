@@ -21,18 +21,12 @@ func TestHandleSystemPackage(t *testing.T) {
 	}
 }
 
-// TestValidateSystemPackage tests validation logic.
 func TestValidateSystemPackage(t *testing.T) {
 	e := &RustEngine{}
 
-	// linux + musl should fail
-	err := e.validateSystemPackage("linux", "musl", "x86_64", "deb")
-	if err == nil {
+	if err := e.validateSystemPackage("linux", "musl", "x86_64", "deb"); err == nil {
 		t.Error("expected linux+musl to fail")
 	}
-
-	// linux + gnu should pass (if cargo-deb is installed, but we can't test that in unit test)
-	// Just test the validation logic
 }
 
 // TestGetPackageCommand tests command mapping.

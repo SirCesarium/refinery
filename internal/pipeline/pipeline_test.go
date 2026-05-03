@@ -41,10 +41,10 @@ func TestNewRegistry(t *testing.T) {
 // TestRegisterAndGet checks provider registration and retrieval.
 func TestRegisterAndGet(t *testing.T) {
 	r := NewRegistry()
-	
+
 	p := &mockCIProvider{name: "test-provider", filename: "test.yml"}
 	r.Register(p)
-	
+
 	// Retrieve the provider
 	retrieved := r.Get("test-provider")
 	if retrieved == nil {
@@ -68,7 +68,7 @@ func TestGetNonExistent(t *testing.T) {
 func TestNewGenerator(t *testing.T) {
 	p := &mockCIProvider{name: "test"}
 	eng := &mockEngine{}
-	
+
 	g := NewGenerator(p, eng)
 	if g == nil {
 		t.Fatal("expected non-nil generator")
@@ -86,7 +86,7 @@ func TestGeneratorGenerate(t *testing.T) {
 	p := &mockCIProvider{name: "test", filename: "test.yml"}
 	eng := &mockEngine{}
 	cfg := &config.Config{}
-	
+
 	g := NewGenerator(p, eng)
 	data, err := g.Generate(cfg)
 	if err != nil {
@@ -101,7 +101,7 @@ func TestGeneratorGenerate(t *testing.T) {
 func TestGeneratorFilename(t *testing.T) {
 	p := &mockCIProvider{name: "test", filename: "workflows/test.yml"}
 	g := NewGenerator(p, nil)
-	
+
 	filename := g.Filename()
 	if filename != "workflows/test.yml" {
 		t.Errorf("expected 'workflows/test.yml', got '%s'", filename)
@@ -111,8 +111,8 @@ func TestGeneratorFilename(t *testing.T) {
 // mockEngine implements engine.BuildEngine for testing.
 type mockEngine struct{}
 
-func (m *mockEngine) ID() string { return "mock" }
-func (m *mockEngine) Prepare(cfg *config.Config) error { return nil }
+func (m *mockEngine) ID() string                        { return "mock" }
+func (m *mockEngine) Prepare(cfg *config.Config) error  { return nil }
 func (m *mockEngine) Validate(cfg *config.Config) error { return nil }
 func (m *mockEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts engine.BuildOptions) error {
 	return nil

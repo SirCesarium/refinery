@@ -5,17 +5,16 @@ import (
 	"testing"
 )
 
-// TestDefault verifies the default configuration values.
 func TestDefault(t *testing.T) {
 	cfg := Default("test-project")
 	if cfg.Project.Name != "test-project" {
-		t.Errorf("Expected project name 'test-project', got '%s'", cfg.Project.Name)
+		t.Errorf("expected project name 'test-project', got '%s'", cfg.Project.Name)
 	}
 	if cfg.Project.Lang != "rust" {
-		t.Errorf("Expected lang 'rust', got '%s'", cfg.Project.Lang)
+		t.Errorf("expected lang 'rust', got '%s'", cfg.Project.Lang)
 	}
 	if cfg.OutputDir != "dist" {
-		t.Errorf("Expected output dir 'dist', got '%s'", cfg.OutputDir)
+		t.Errorf("expected output dir 'dist', got '%s'", cfg.OutputDir)
 	}
 }
 
@@ -87,7 +86,6 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-// TestWriteAndLoad ensures config can be written to TOML and read back.
 func TestWriteAndLoad(t *testing.T) {
 	tmpDir := t.TempDir()
 	tomlPath := filepath.Join(tmpDir, "refinery.toml")
@@ -102,16 +100,16 @@ func TestWriteAndLoad(t *testing.T) {
 	}
 
 	if err := cfg.Write(tomlPath); err != nil {
-		t.Fatalf("Failed to write: %v", err)
+		t.Fatalf("failed to write: %v", err)
 	}
 
 	loaded, err := Load(tomlPath)
 	if err != nil {
-		t.Fatalf("Failed to load: %v", err)
+		t.Fatalf("failed to load: %v", err)
 	}
 
 	if loaded.Project.Name != cfg.Project.Name {
-		t.Errorf("Loaded name mismatch: got %s, want %s", loaded.Project.Name, cfg.Project.Name)
+		t.Errorf("loaded name mismatch: got %s, want %s", loaded.Project.Name, cfg.Project.Name)
 	}
 }
 
@@ -126,7 +124,6 @@ func TestRemoveRedundantFields(t *testing.T) {
 	}
 }
 
-// TestNamingResolution validates the template substitution logic.
 func TestNamingResolution(t *testing.T) {
 	n := NamingConfig{
 		Binary:  "{artifact}-{os}-{arch}{abi}",
@@ -136,12 +133,12 @@ func TestNamingResolution(t *testing.T) {
 	binary := n.Resolve(n.Binary, "myapp", "linux", "amd64", "1.0.0", "musl", "exe")
 	expected := "myapp-linux-amd64-musl.exe"
 	if binary != expected {
-		t.Errorf("Binary resolution failed: got %s, want %s", binary, expected)
+		t.Errorf("binary resolution failed: got %s, want %s", binary, expected)
 	}
 
 	pkg := n.Resolve(n.Package, "myapp", "linux", "amd64", "1.0.0", "musl", "deb")
 	expectedPkg := "myapp-1.0.0-linux-amd64-musl.deb"
 	if pkg != expectedPkg {
-		t.Errorf("Package resolution failed: got %s, want %s", pkg, expectedPkg)
+		t.Errorf("package resolution failed: got %s, want %s", pkg, expectedPkg)
 	}
 }

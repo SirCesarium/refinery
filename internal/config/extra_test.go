@@ -4,8 +4,7 @@ import (
 	"testing"
 )
 
-// TestHooksResolveAll tests hook resolution with version and abi.
-func TestHooksResolveAll(t *testing.T) {
+func TestHooksResolveAllNew(t *testing.T) {
 	h := Hooks{
 		PreBuild:  []string{"echo {version}", "echo {abi}"},
 		PostBuild: []string{"echo {artifact}"},
@@ -27,24 +26,27 @@ func TestHooksResolveAll(t *testing.T) {
 	}
 }
 
-// TestNamingResolveEdgeCases tests edge cases in naming resolution.
-func TestNamingResolveEdgeCases(t *testing.T) {
+func TestNamingResolveEdgeCasesNew(t *testing.T) {
 	n := NamingConfig{
 		Binary:  "{artifact}-{os}-{arch}{abi}",
 		Package: "{artifact}-{version}-{os}-{arch}{abi}.{ext}",
 	}
 
-	// Test with empty abi
-	result := n.Resolve(n.Binary, "myapp", "linux", "amd64", "1.0.0", "", "exe")
+	result := n.Resolve(n.Binary, "myapp", "linux", "amd64", "1.0.0", "", "")
 	expected := "myapp-linux-amd64"
 	if result != expected {
 		t.Errorf("Binary resolution failed: got '%s', want '%s'", result, expected)
 	}
 
-	// Test with abi
-	result = n.Resolve(n.Binary, "myapp", "linux", "amd64", "1.0.0", "musl", "exe")
+	result = n.Resolve(n.Binary, "myapp", "linux", "amd64", "1.0.0", "musl", "")
 	expected = "myapp-linux-amd64-musl"
 	if result != expected {
 		t.Errorf("Binary resolution with abi failed: got '%s', want '%s'", result, expected)
+	}
+
+	result = n.Resolve(n.Package, "myapp", "linux", "amd64", "1.0.0", "musl", "tar.gz")
+	expected = "myapp-1.0.0-linux-amd64-musl.tar.gz"
+	if result != expected {
+		t.Errorf("Package resolution failed: got '%s', want '%s'", result, expected)
 	}
 }
