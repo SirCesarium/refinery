@@ -1,7 +1,7 @@
 # Refinery
 
 [![CI](https://github.com/SirCesarium/refinery/actions/workflows/ci.yml/badge.svg)](https://github.com/SirCesarium/refinery/actions/workflows/ci.yml)
-[![Build Binaries](https://github.com/SirCesarium/refinery/actions/workflows/refinery-binaries.yml/badge.svg)](https://github.com/SirCesarium/refinery/actions/workflows/refinery-binaries.yml)
+[![Build](https://github.com/SirCesarium/refinery/actions/workflows/refinery-build.yml/badge.svg)](https://github.com/SirCesarium/refinery/actions/workflows/refinery-build.yml)
 [![Latest Release](https://img.shields.io/github/v/release/SirCesarium/refinery?label=release)](https://github.com/SirCesarium/refinery/releases/latest)
 [![Go Reference](https://pkg.go.dev/badge/github.com/SirCesarium/refinery.svg)](https://pkg.go.dev/github.com/SirCesarium/refinery)
 
