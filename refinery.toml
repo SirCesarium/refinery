@@ -1,0 +1,28 @@
+refinery_version = "latest"
+
+[project]
+name = "refinery"
+lang = "go"
+author = "SirCesarium"
+license = "MIT"
+
+[naming]
+binary = "{artifact}-{os}-{arch}{abi}"
+package = "{artifact}-{version}-{os}-{arch}{abi}.{ext}"
+
+[artifacts.refinery]
+type = "bin"
+source = "./cmd/refinery"
+packages = ["tar.gz", "zip"]
+
+[artifacts.refinery.targets.linux]
+os = "linux"
+archs = ["amd64", "arm64"]
+
+[artifacts.refinery.targets.windows]
+os = "windows"
+archs = ["amd64"]
+
+[artifacts.refinery.targets.darwin]
+os = "darwin"
+archs = ["amd64", "arm64"]

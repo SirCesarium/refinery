@@ -1,1 +1,8 @@
 /bin
+/dist
+tests/smoke/rust-project/dist
+tests/smoke/rust-project/logs
+tests/smoke/rust-project/target
+tests/smoke/rust-project/smoke-test.h
+tests/smoke/rust-project/Cargo.lock
+tests/smoke/go-project/dist
