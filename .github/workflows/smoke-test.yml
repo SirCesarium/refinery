@@ -5,9 +5,11 @@ on:
     inputs:
       refinery_bin:
         description: 'Path to refinery binary'
+        type: string
         required: true
       filter:
         description: 'OS filter'
+        type: string
         required: false
         default: ""
 
