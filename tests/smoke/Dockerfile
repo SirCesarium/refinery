@@ -4,7 +4,7 @@ FROM golang:1.26-bookworm
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Pre-install all required targets
+# Pre-install all required Rust targets
 RUN rustup target add \
     x86_64-unknown-linux-gnu \
     x86_64-unknown-linux-musl \
@@ -41,12 +41,16 @@ ENV PATH="/root/.wasmtime/bin:${PATH}"
 RUN cargo install cargo-deb cargo-generate-rpm cargo-wix || true
 
 WORKDIR /app
+
 COPY . .
 
-# Copy LICENSE locally to the smoke project
+# Copy LICENSE locally to the smoke projects
 RUN cp LICENSE tests/smoke/rust-project/LICENSE
 
-# Warm up go dependencies
+# Warm up Go dependencies
 RUN go mod download
+
+# Pre-build Go project to cache dependencies
+RUN cd tests/smoke/go-project && go build -o /dev/null .
 
 CMD ["make", "smoke-test-local"]

@@ -5,6 +5,7 @@ REFINERY_BIN=$(realpath "$1")
 FILTER_OS="$2"
 [ -f "$REFINERY_BIN" ] || (echo "Refinery bin not found" && exit 1)
 
+# Test Rust project
 cd tests/smoke/rust-project
 rm -rf dist logs
 mkdir -p logs
@@ -142,4 +143,29 @@ if [ -z "$FILTER_OS" ] || [[ "$FILTER_OS" == *"linux"* ]]; then
     [ -f "dist/smoke-bin-0.1.0-linux-x86_64-gnu.rpm" ] && echo ".rpm: OK"
 fi
 
+echo "All Rust smoke tests PASSED!"
+
+# Test Go project
+echo "Testing Go project..."
+cd /app
+cd tests/smoke/go-project
+rm -rf dist
+
+# Build for linux/amd64
+"$REFINERY_BIN" build --artifact app --os linux --arch amd64
+[ -f "dist/app-linux-amd64" ] && echo "Go linux/amd64 build: OK" || (echo "Go linux/amd64 build: FAILED" && exit 1)
+
+# Build for windows/amd64
+"$REFINERY_BIN" build --artifact app --os windows --arch amd64
+[ -f "dist/app-windows-amd64.exe" ] && echo "Go windows/amd64 build: OK" || (echo "Go windows/amd64 build: FAILED" && exit 1)
+
+# Build for darwin/amd64
+"$REFINERY_BIN" build --artifact app --os darwin --arch amd64
+[ -f "dist/app-darwin-amd64" ] && echo "Go darwin/amd64 build: OK" || (echo "Go darwin/amd64 build: FAILED" && exit 1)
+
+# Test packaging
+"$REFINERY_BIN" build --artifact app --os linux --arch amd64
+[ -f "dist/app-0.0.0-linux-amd64.tar.gz" ] && echo "Go linux/amd64 package: OK" || (echo "Go linux/amd64 package: FAILED" && exit 1)
+
+echo "All Go smoke tests PASSED!"
 echo "All smoke tests PASSED!"
