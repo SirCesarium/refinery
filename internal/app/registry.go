@@ -3,15 +3,17 @@ package app
 
 import (
 	"github.com/SirCesarium/refinery/internal/engine"
+	"github.com/SirCesarium/refinery/internal/engine/goengine"
 	"github.com/SirCesarium/refinery/internal/engine/rust"
 	"github.com/SirCesarium/refinery/internal/pipeline"
 	"github.com/SirCesarium/refinery/internal/pipeline/github"
 )
 
-// NewDefaultEngineRegistry creates a registry with the Rust engine registered.
+// NewDefaultEngineRegistry creates a registry with supported language engines.
 func NewDefaultEngineRegistry() *engine.EngineRegistry {
 	r := engine.NewRegistry()
 	r.Register(&rust.RustEngine{})
+	r.Register(&goengine.GoEngine{})
 	return r
 }
 

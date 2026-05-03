@@ -40,13 +40,28 @@ var initCmd = &cobra.Command{
 
 		cfg := config.Default(projectName)
 
+		// Detect project language from manifest files.
+		lang := detectLanguage()
+		cfg.Project.Lang = lang
+
 		if err := cfg.Write("refinery.toml"); err != nil {
 			ui.Fatal(err, "Failed to write 'refinery.toml'. Ensure you have write permissions in this directory.")
 		}
 
-		ui.Success("Successfully initialized refinery project: %s", projectName)
+		ui.Success("Successfully initialized refinery project: %s (language: %s)", projectName, lang)
 		ui.Info("You can now edit 'refinery.toml' to define your artifacts.")
 	},
+}
+
+// detectLanguage attempts to detect the project language from manifest files.
+func detectLanguage() string {
+	if _, err := os.Stat("go.mod"); err == nil {
+		return "go"
+	}
+	if _, err := os.Stat("Cargo.toml"); err == nil {
+		return "rust"
+	}
+	return "rust"
 }
 
 func init() {
