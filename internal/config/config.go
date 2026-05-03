@@ -14,9 +14,43 @@ type Config struct {
 	RefineryVersion string                     `toml:"refinery_version" mapstructure:"refinery_version"`
 	Project         Project                    `toml:"project" mapstructure:"project"`
 	OutputDir       string                     `toml:"output_dir" mapstructure:"output_dir"`
+	PreBuild        []BuildStep                `toml:"pre_build,omitempty" mapstructure:"pre_build"`
+	PostBuild       []BuildStep                `toml:"post_build,omitempty" mapstructure:"post_build"`
+	BuildRefinery   *BuildRefineryConfig       `toml:"build_refinery,omitempty" mapstructure:"build_refinery"`
 	Artifacts       map[string]*ArtifactConfig `toml:"artifacts" mapstructure:"artifacts"`
 	Naming          NamingConfig               `toml:"naming,omitempty" mapstructure:"naming"`
 	Metadata        map[string]string          `toml:"metadata,omitempty" mapstructure:"metadata"`
+}
+
+// BuildRefineryConfig defines how to build refinery itself.
+type BuildRefineryConfig struct {
+	Enabled bool   `toml:"enabled" mapstructure:"enabled"`
+	Source  string `toml:"source,omitempty" mapstructure:"source"`
+	Version string `toml:"version,omitempty" mapstructure:"version"`
+}
+
+type BuildStep struct {
+	ID      string         `toml:"id,omitempty" mapstructure:"id"`
+	Command []string       `toml:"command,omitempty" mapstructure:"command"`
+	Action  string         `toml:"action,omitempty" mapstructure:"action"`
+	OS      []string       `toml:"os,omitempty" mapstructure:"os"`
+	With    map[string]any `toml:"with,omitempty" mapstructure:"with"`
+}
+
+// GetCIRequirements returns CI requirements from pre/post build steps.
+func (c *Config) GetCIRequirements() []string {
+	reqs := []string{}
+	for _, step := range c.PreBuild {
+		if step.Action != "" {
+			reqs = append(reqs, "action:"+step.Action)
+		}
+	}
+	for _, step := range c.PostBuild {
+		if step.Action != "" {
+			reqs = append(reqs, "action:"+step.Action)
+		}
+	}
+	return reqs
 }
 
 type Project struct {

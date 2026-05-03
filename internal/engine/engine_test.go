@@ -84,3 +84,11 @@ func (m *mockEngine) GetCIRequirements(cfg *config.Config) []string {
 func (m *mockEngine) Package(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, format string) error {
 	return nil
 }
+func (m *mockEngine) GetSupportedArchs(os string) []string {
+	switch os {
+	case "linux", "windows", "darwin":
+		return []string{"amd64", "386", "arm64", "arm"}
+	default:
+		return []string{}
+	}
+}

@@ -73,9 +73,30 @@ func (e *GoEngine) Package(cfg *config.Config, art *config.ArtifactConfig, opts 
 func (e *GoEngine) GetCIRequirements(cfg *config.Config) []string {
 	reqs := []string{"go"}
 	for _, art := range cfg.Artifacts {
-		reqs = e.addPackageRequirements(reqs, art)
+		for _, pkg := range art.Packages {
+			switch pkg {
+			case "deb", "rpm":
+				reqs = append(reqs, "pkg:go-bin-tools")
+			}
+		}
 	}
 	return reqs
+}
+
+// GetSupportedArchs returns supported architectures for a given OS in Go.
+func (e *GoEngine) GetSupportedArchs(os string) []string {
+	switch os {
+	case "linux":
+		return []string{"amd64", "386", "arm64", "arm", "ppc64", "ppc64le", "mips", "mipsle", "mips64", "mips64le", "s390x", "sparc64", "riscv64"}
+	case "windows":
+		return []string{"amd64", "386", "arm64", "arm"}
+	case "darwin":
+		return []string{"amd64", "arm64"}
+	case "wasi":
+		return []string{"wasm"}
+	default:
+		return []string{}
+	}
 }
 
 // addPackageRequirements adds CI requirements based on package formats.

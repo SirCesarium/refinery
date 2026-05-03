@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/SirCesarium/refinery/internal/config"
 	"github.com/SirCesarium/refinery/internal/engine"
@@ -168,7 +169,18 @@ func (p *GithubProvider) getBuildSteps(eng engine.BuildEngine, cfg *config.Confi
 		{Name: "Checkout", Uses: ActionCheckout},
 	}
 	steps = p.addCIRequirementSteps(steps, eng, cfg)
-	steps = append(steps, p.getBuildAndUploadSteps(eng, cfg)...)
+
+	// Build refinery first if enabled (needed for pre_build steps that use it)
+	if cfg.BuildRefinery != nil && cfg.BuildRefinery.Enabled {
+		steps = append(steps, Step{
+			Name: "Build Refinery from Source",
+			Run:  "go build -o ./refinery-local ./cmd/refinery",
+		})
+	}
+
+	steps = p.addPreBuildSteps(steps, cfg)
+	steps = append(steps, p.getBuildArtifactStep(eng, cfg)...)
+	steps = p.addPostBuildSteps(steps, cfg)
 	return steps
 }
 
@@ -176,6 +188,18 @@ func (p *GithubProvider) getBuildSteps(eng engine.BuildEngine, cfg *config.Confi
 func (p *GithubProvider) addCIRequirementSteps(steps []Step, eng engine.BuildEngine, cfg *config.Config) []Step {
 	for _, req := range eng.GetCIRequirements(cfg) {
 		switch {
+		case req == "go":
+			steps = append(steps, Step{
+				Name: "Setup Go",
+				Uses: ActionSetupGo,
+				With: map[string]any{"go-version": "1.22", "cache": true},
+			})
+		case req == "pkg:go-bin-tools":
+			steps = append(steps, Step{
+				Name: "Install Go Bin Tools",
+				If:   "runner.os == 'Linux'",
+				Run:  "go install github.com/mh-cbon/go-bin-deb@latest && go install github.com/mh-cbon/go-bin-rpm@latest",
+			})
 		case req == "rust":
 			steps = append(steps, Step{
 				Name: "Setup Rust",
@@ -217,12 +241,21 @@ func (p *GithubProvider) addCIRequirementSteps(steps []Step, eng engine.BuildEng
 	return steps
 }
 
-// getBuildAndUploadSteps returns the build artifact and upload steps.
-func (p *GithubProvider) getBuildAndUploadSteps(eng engine.BuildEngine, cfg *config.Config) []Step {
+// getBuildArtifactStep returns the artifact build step.
+func (p *GithubProvider) getBuildArtifactStep(eng engine.BuildEngine, cfg *config.Config) []Step {
+	if cfg.BuildRefinery != nil && cfg.BuildRefinery.Enabled {
+		return []Step{
+			{
+				Name: "Build Artifact using Local Refinery",
+				Run:  "./refinery-local build --artifact ${{ matrix.artifact }} --os ${{ matrix.os }} --arch ${{ matrix.arch }}${{ matrix.abi != '' && format(' --abi {0}', matrix.abi) || '' }}",
+			},
+		}
+	}
+
 	return []Step{
 		{
 			Name: "Build Artifact",
-			Uses: "SirCesarium/refinery@main",
+			Uses: ActionRefinery,
 			With: map[string]any{
 				"artifact": "${{ matrix.artifact }}",
 				"os":       "${{ matrix.os }}",
@@ -231,18 +264,69 @@ func (p *GithubProvider) getBuildAndUploadSteps(eng engine.BuildEngine, cfg *con
 				"version":  cfg.RefineryVersion,
 			},
 		},
-		{
-			Name: "Upload",
-			Uses: ActionUploadArtifact,
-			With: map[string]any{
-				"name":              "bin-${{ matrix.artifact }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}",
-				"path":              cfg.OutputDir,
-				"if-no-files-found": "error",
-				"compression-level": 0,
-				"overwrite":         false,
-			},
-		},
 	}
+}
+
+// addPreBuildSteps adds steps from [[pre_build]] config.
+func (p *GithubProvider) addPreBuildSteps(steps []Step, cfg *config.Config) []Step {
+	for _, step := range cfg.PreBuild {
+		steps = append(steps, p.createGithubStep(step, "Pre-Build"))
+	}
+	return steps
+}
+
+// addPostBuildSteps adds steps from [[post_build]] config.
+func (p *GithubProvider) addPostBuildSteps(steps []Step, cfg *config.Config) []Step {
+	for _, step := range cfg.PostBuild {
+		steps = append(steps, p.createGithubStep(step, "Post-Build"))
+	}
+	return steps
+}
+
+func (p *GithubProvider) createGithubStep(step config.BuildStep, prefix string) Step {
+	// Resolve action name to full workflow path if needed
+	action := step.Action
+	if action != "" && !strings.Contains(action, "/") && !strings.HasSuffix(action, ".yml") {
+		action = fmt.Sprintf("./.github/workflows/%s.yml", action)
+	}
+
+	// Use action name as ID if not provided
+	id := step.ID
+	if id == "" && step.Action != "" {
+		// Extract name from action path
+		parts := strings.Split(step.Action, "/")
+		name := parts[len(parts)-1]
+		name = strings.TrimSuffix(name, ".yml")
+		id = name
+	}
+
+	ghStep := Step{
+		Name: fmt.Sprintf("%s: %s", prefix, id),
+	}
+	if action != "" {
+		ghStep.Uses = action
+		ghStep.With = step.With
+	} else if len(step.Command) > 0 {
+		ghStep.Run = strings.Join(step.Command, "\n")
+	}
+
+	if len(step.OS) > 0 {
+		var conditions []string
+		for _, osName := range step.OS {
+			switch strings.ToLower(osName) {
+			case "linux":
+				conditions = append(conditions, "runner.os == 'Linux'")
+			case "windows":
+				conditions = append(conditions, "runner.os == 'Windows'")
+			case "darwin", "macos":
+				conditions = append(conditions, "runner.os == 'macOS'")
+			}
+		}
+		if len(conditions) > 0 {
+			ghStep.If = strings.Join(conditions, " || ")
+		}
+	}
+	return ghStep
 }
 
 // assembleJobs creates the jobs map for the workflow.

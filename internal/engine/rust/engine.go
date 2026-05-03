@@ -93,10 +93,34 @@ func (e *RustEngine) isBinDefined(name string, manifest *cargoManifest) bool {
 func (e *RustEngine) GetCIRequirements(cfg *config.Config) []string {
 	reqs := []string{"rust"}
 	for _, art := range cfg.Artifacts {
-		reqs = e.addTargetRequirements(reqs, art)
-		reqs = e.addPackageRequirements(reqs, art)
+		for _, pkg := range art.Packages {
+			switch pkg {
+			case "deb":
+				reqs = append(reqs, "pkg:cargo-deb")
+			case "rpm":
+				reqs = append(reqs, "pkg:cargo-generate-rpm")
+			case "msi":
+				reqs = append(reqs, "pkg:cargo-wix")
+			}
+		}
 	}
 	return reqs
+}
+
+// GetSupportedArchs returns supported architectures for a given OS in Rust.
+func (e *RustEngine) GetSupportedArchs(os string) []string {
+	switch os {
+	case "linux":
+		return []string{"x86_64", "i686", "aarch64"}
+	case "windows":
+		return []string{"x86_64", "i686", "aarch64"}
+	case "darwin":
+		return []string{"x86_64", "aarch64"}
+	case "wasi":
+		return []string{"wasm32"}
+	default:
+		return []string{}
+	}
 }
 
 // addTargetRequirements adds CI requirements based on target configuration.

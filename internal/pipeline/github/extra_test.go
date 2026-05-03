@@ -82,6 +82,9 @@ func (m *mockBuildEngineForGithub) GetCIRequirements(cfg *config.Config) []strin
 func (m *mockBuildEngineForGithub) Package(cfg *config.Config, art *config.ArtifactConfig, opts engine.BuildOptions, format string) error {
 	return nil
 }
+func (m *mockBuildEngineForGithub) GetSupportedArchs(os string) []string {
+	return []string{"x86_64", "i686", "aarch64"}
+}
 
 func TestGetBuildStepsFunction(t *testing.T) {
 	mockEng := &mockBuildEngineForGithub{
@@ -129,7 +132,7 @@ func TestAddCIRequirementStepsFunction(t *testing.T) {
 	}
 }
 
-func TestGetBuildAndUploadStepsFunction(t *testing.T) {
+func TestGetBuildArtifactStepsFunction(t *testing.T) {
 	mockEng := &mockBuildEngineForGithub{
 		requirements: []string{"rust", "cargo-deb"},
 	}
@@ -155,7 +158,7 @@ func TestGetBuildAndUploadStepsFunction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProvider returned error: %v", err)
 	}
-	steps := p.getBuildAndUploadSteps(mockEng, cfg)
+	steps := p.getBuildArtifactStep(mockEng, cfg)
 	if len(steps) == 0 {
 		t.Error("expected non-empty steps")
 	}

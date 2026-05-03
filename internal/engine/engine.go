@@ -21,6 +21,7 @@ type BuildEngine interface {
 	Build(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions) error
 	GetCIRequirements(cfg *config.Config) []string
 	Package(cfg *config.Config, art *config.ArtifactConfig, opts BuildOptions, format string) error
+	GetSupportedArchs(os string) []string
 }
 
 type EngineRegistry struct {

@@ -187,7 +187,7 @@ func TestAddCIRequirementSteps(t *testing.T) {
 	}
 }
 
-func TestGetBuildAndUploadSteps(t *testing.T) {
+func TestGetBuildArtifactSteps(t *testing.T) {
 	p, err := NewProvider("build")
 	if err != nil {
 		t.Fatalf("NewProvider returned error: %v", err)
@@ -214,7 +214,7 @@ func TestGetBuildAndUploadSteps(t *testing.T) {
 		},
 	}
 
-	steps := p.getBuildAndUploadSteps(mockEng, cfg)
+	steps := p.getBuildArtifactStep(mockEng, cfg)
 	if len(steps) == 0 {
 		t.Error("expected non-empty steps")
 	}
