@@ -44,13 +44,14 @@ func TestGenerateFunction(t *testing.T) {
 		},
 		Artifacts: map[string]*config.ArtifactConfig{
 			"test": {
-				Type: "binary",
+				Type: "bin",
 				Targets: map[string]config.TargetConfig{
 					"linux-x64": {
 						OS:    "linux",
 						Archs: []string{"x86_64"},
 					},
 				},
+				Source: "main.go",
 			},
 		},
 	}
@@ -86,7 +87,7 @@ func (m *mockBuildEngineForGithub) GetSupportedArchs(os string) []string {
 	return []string{"x86_64", "i686", "aarch64"}
 }
 
-func TestGetBuildStepsFunction(t *testing.T) {
+func TestGetSplitStepsFunction(t *testing.T) {
 	mockEng := &mockBuildEngineForGithub{
 		requirements: []string{"rust", "cargo-deb"},
 	}
@@ -95,26 +96,9 @@ func TestGetBuildStepsFunction(t *testing.T) {
 			Name: "test-project",
 			Lang: "rust",
 		},
-	}
-
-	p, err := NewProvider("build")
-	if err != nil {
-		t.Fatalf("NewProvider returned error: %v", err)
-	}
-	steps := p.getBuildSteps(mockEng, cfg)
-	if len(steps) == 0 {
-		t.Error("expected non-empty build steps")
-	}
-}
-
-func TestAddCIRequirementStepsFunction(t *testing.T) {
-	mockEng := &mockBuildEngineForGithub{
-		requirements: []string{"rust", "cargo-deb"},
-	}
-	cfg := &config.Config{
-		Project: config.Project{
-			Name: "test-project",
-			Lang: "rust",
+		BuildRefinery: &config.BuildRefineryConfig{Enabled: true},
+		PostBuild: []config.BuildStep{
+			{Action: "cleanup", Once: true},
 		},
 	}
 
@@ -122,13 +106,9 @@ func TestAddCIRequirementStepsFunction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProvider returned error: %v", err)
 	}
-	steps := []Step{
-		{Name: "Checkout", Uses: "actions/checkout@v4"},
-	}
-
-	newSteps := p.addCIRequirementSteps(steps, mockEng, cfg)
-	if len(newSteps) <= len(steps) {
-		t.Error("expected more steps after adding CI requirements")
+	setup, build, teardown := p.getSplitSteps(mockEng, cfg)
+	if len(setup) == 0 || len(build) == 0 || len(teardown) == 0 {
+		t.Error("expected non-empty setup, build, and teardown steps")
 	}
 }
 
@@ -140,13 +120,14 @@ func TestGetBuildArtifactStepsFunction(t *testing.T) {
 		},
 		Artifacts: map[string]*config.ArtifactConfig{
 			"test": {
-				Type: "binary",
+				Type: "bin",
 				Targets: map[string]config.TargetConfig{
 					"linux-x64": {
 						OS:    "linux",
 						Archs: []string{"x86_64"},
 					},
 				},
+				Source: "main.go",
 			},
 		},
 	}
@@ -163,6 +144,7 @@ func TestGetBuildArtifactStepsFunction(t *testing.T) {
 
 func TestCreateGithubStepResolution(t *testing.T) {
 	p := &GithubProvider{}
+	eng := &mockBuildEngineForGithub{}
 	cfg := &config.Config{
 		PreBuild: []config.BuildStep{
 			{Action: "smoke-test", With: map[string]any{"key": "value"}, Once: true},
@@ -171,27 +153,45 @@ func TestCreateGithubStepResolution(t *testing.T) {
 		},
 	}
 
-	steps := p.addPreBuildSteps([]Step{}, cfg)
-	if len(steps) != 3 {
-		t.Fatalf("expected 3 steps, got %d", len(steps))
-	}
+	setup, build, _ := p.getSplitSteps(eng, cfg)
 
 	// Test local action resolution and Once flag
-	if steps[0].Uses != "./.github/actions/smoke-test" {
-		t.Errorf("expected './.github/actions/smoke-test', got '%s'", steps[0].Uses)
+	foundGlobal := false
+	for _, s := range setup {
+		if s.Uses == "./.github/actions/smoke-test" {
+			foundGlobal = true
+			break
+		}
 	}
-	if steps[0].If != "strategy.job-index == 0" {
-		t.Errorf("expected if 'strategy.job-index == 0', got '%s'", steps[0].If)
+	if !foundGlobal {
+		t.Error("expected './.github/actions/smoke-test' in setup steps")
 	}
 
 	// Test OS filtering
-	if steps[1].If != "(runner.os == 'Linux')" {
-		t.Errorf("expected if '(runner.os == 'Linux')', got '%s'", steps[1].If)
+	foundOS := false
+	for _, s := range build {
+		if s.Uses == "custom/action@v1" && s.If == "runner.os == 'Linux'" {
+			foundOS = true
+			break
+		}
+	}
+	if !foundOS {
+		t.Error("expected 'custom/action@v1' with OS filter in build steps")
 	}
 
 	// Test combined OS and Once
-	expectedIf := "(runner.os == 'Windows' || runner.os == 'Linux') && strategy.job-index == 0"
-	if steps[2].If != expectedIf {
-		t.Errorf("expected if '%s', got '%s'", expectedIf, steps[2].If)
+	foundCombined := false
+	for _, s := range setup {
+		if s.Uses == "my-workflow.yml" {
+			foundCombined = true
+			expectedIf := "runner.os == 'Windows' || runner.os == 'Linux'"
+			if s.If != expectedIf {
+				t.Errorf("expected if '%s', got '%s'", expectedIf, s.If)
+			}
+			break
+		}
+	}
+	if !foundCombined {
+		t.Error("expected 'my-workflow.yml' in setup steps")
 	}
 }

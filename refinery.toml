@@ -16,11 +16,12 @@ enabled = true
 [[pre_build]]
 action = "smoke-test"
 once = true
-with = { refinery_bin = "./refinery-local", filter = "${{ matrix.os }}" }
+with = { refinery_bin = "./refinery-local" }
 
 [[post_build]]
 action = "upload-artifacts"
-with = { name = "bin-${{ matrix.artifact }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}", path = "dist" }
+once = true
+with = { name = "all-platforms-binaries", path = "artifacts" }
 
 [artifacts.refinery]
 type = "bin"

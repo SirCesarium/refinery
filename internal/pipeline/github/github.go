@@ -82,8 +82,8 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 	}
 
 	include := p.buildMatrix(cfg)
-	buildSteps := p.getBuildSteps(eng, cfg)
-	jobs := p.assembleJobs(include, buildSteps)
+	setup, build, teardown := p.getSplitSteps(eng, cfg)
+	jobs := p.assembleJobs(include, setup, build, teardown)
 
 	wf := Workflow{
 		Name: "Refinery Build",
@@ -101,6 +101,92 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 	}
 
 	return yaml.Marshal(wf)
+}
+
+func (p *GithubProvider) getSplitSteps(eng engine.BuildEngine, cfg *config.Config) (setup, build, teardown []Step) {
+	setup = append(setup, Step{Name: "Checkout", Uses: ActionCheckout})
+	setup = p.addCIRequirementSteps(setup, eng, cfg)
+
+	buildRefinery := cfg.BuildRefinery != nil && cfg.BuildRefinery.Enabled
+	if buildRefinery {
+		setup = append(setup, Step{
+			Name: "Build Refinery from Source",
+			Run:  "go build -o ./refinery-local ./cmd/refinery",
+		})
+	}
+
+	for _, step := range cfg.PreBuild {
+		if step.Once {
+			setup = append(setup, p.createGithubStep(step, "Pre-Build (Global)"))
+		}
+	}
+
+	if buildRefinery {
+		setup = append(setup, Step{
+			Name: "Upload Local Refinery",
+			Uses: ActionUploadArtifact,
+			With: map[string]any{"name": "refinery-local", "path": "./refinery-local", "retention-days": 1},
+		})
+	}
+
+	build = append(build, Step{Name: "Checkout", Uses: ActionCheckout})
+	if buildRefinery {
+		build = append(build, Step{
+			Name: "Download Local Refinery",
+			Uses: ActionDownloadArtifact,
+			With: map[string]any{"name": "refinery-local", "path": "."},
+		})
+		build = append(build, Step{
+			Name: "Prepare Local Refinery", Run: "chmod +x ./refinery-local",
+		})
+	}
+
+	for _, step := range cfg.PreBuild {
+		if !step.Once {
+			build = append(build, p.createGithubStep(step, "Pre-Build"))
+		}
+	}
+
+	build = append(build, p.getBuildArtifactStep(cfg)...)
+
+	hasGlobalPost := false
+	for _, s := range cfg.PostBuild {
+		if s.Once {
+			hasGlobalPost = true
+			break
+		}
+	}
+
+	if hasGlobalPost {
+		build = append(build, Step{
+			Name: "Internal Upload for Teardown",
+			Uses: ActionUploadArtifact,
+			With: map[string]any{"name": "dist-${{ strategy.job-index }}", "path": "dist", "retention-days": 1},
+		})
+	}
+
+	for _, step := range cfg.PostBuild {
+		if !step.Once {
+			build = append(build, p.createGithubStep(step, "Post-Build"))
+		}
+	}
+
+	if hasGlobalPost {
+		teardown = append(teardown, Step{Name: "Checkout", Uses: ActionCheckout})
+		teardown = append(teardown, Step{
+			Name: "Download All Artifacts",
+			Uses: ActionDownloadArtifact,
+			With: map[string]any{"path": "./artifacts", "merge-multiple": true},
+		})
+
+		for _, step := range cfg.PostBuild {
+			if step.Once {
+				teardown = append(teardown, p.createGithubStep(step, "Post-Build (Global)"))
+			}
+		}
+	}
+
+	return
 }
 
 // buildMatrix creates the matrix include array from config artifacts and targets.
@@ -123,7 +209,6 @@ func (p *GithubProvider) buildMatrix(cfg *config.Config) []map[string]any {
 						continue
 					}
 					uniqueMatrix[key] = true
-
 					m := map[string]any{
 						"artifact": aName,
 						"os":       tCfg.OS,
@@ -163,74 +248,53 @@ func (p *GithubProvider) getRunsOn(osName string) string {
 	}
 }
 
-// getBuildSteps assembles the list of steps for the build job.
-func (p *GithubProvider) getBuildSteps(eng engine.BuildEngine, cfg *config.Config) []Step {
-	steps := []Step{
-		{Name: "Checkout", Uses: ActionCheckout},
-	}
-	steps = p.addCIRequirementSteps(steps, eng, cfg)
-
-	// Build refinery first if enabled (needed for pre_build steps that use it)
-	if cfg.BuildRefinery != nil && cfg.BuildRefinery.Enabled {
-		steps = append(steps, Step{
-			Name: "Build Refinery from Source",
-			Run:  "go build -o ./refinery-local ./cmd/refinery",
-		})
-	}
-
-	steps = p.addPreBuildSteps(steps, cfg)
-	steps = append(steps, p.getBuildArtifactStep(cfg)...)
-	steps = p.addPostBuildSteps(steps, cfg)
-	return steps
-}
-
 // addCIRequirementSteps adds steps based on engine requirements.
 func (p *GithubProvider) addCIRequirementSteps(steps []Step, eng engine.BuildEngine, cfg *config.Config) []Step {
 	for _, req := range eng.GetCIRequirements(cfg) {
-		switch {
-		case req == "go":
+		switch req {
+		case "go":
 			steps = append(steps, Step{
 				Name: "Setup Go",
 				Uses: ActionSetupGo,
 				With: map[string]any{"go-version": "1.26.2", "cache": true},
 			})
-		case req == "pkg:go-bin-tools":
+		case "pkg:go-bin-tools":
 			steps = append(steps, Step{
 				Name: "Install Go Bin Tools",
 				If:   "runner.os == 'Linux'",
 				Run:  "go install github.com/mh-cbon/go-bin-deb@latest && go install github.com/mh-cbon/go-bin-rpm@latest",
 			})
-		case req == "rust":
+		case "rust":
 			steps = append(steps, Step{
 				Name: "Setup Rust",
 				Uses: ActionRustToolchain,
 				With: map[string]any{"cache": true},
 			})
-		case req == "cross-linker:linux-aarch64":
+		case "cross-linker:linux-aarch64":
 			steps = append(steps, Step{
 				Name: "Install ARM Linker",
 				If:   "runner.os == 'Linux'",
 				Run:  "sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu",
 			})
-		case req == "pkg:musl-tools":
+		case "pkg:musl-tools":
 			steps = append(steps, Step{
 				Name: "Install Musl Tools",
 				If:   "runner.os == 'Linux'",
 				Run:  "sudo apt-get update && sudo apt-get install -y musl-tools",
 			})
-		case req == "pkg:cargo-deb":
+		case "pkg:cargo-deb":
 			steps = append(steps, Step{
 				Name: "Install cargo-deb",
 				If:   "runner.os == 'Linux'",
 				Run:  "cargo install cargo-deb",
 			})
-		case req == "pkg:cargo-generate-rpm":
+		case "pkg:cargo-generate-rpm":
 			steps = append(steps, Step{
 				Name: "Install cargo-generate-rpm",
 				If:   "runner.os == 'Linux'",
 				Run:  "cargo install cargo-generate-rpm",
 			})
-		case req == "pkg:cargo-wix":
+		case "pkg:cargo-wix":
 			steps = append(steps, Step{
 				Name: "Install cargo-wix",
 				If:   "runner.os == 'Windows'",
@@ -244,143 +308,116 @@ func (p *GithubProvider) addCIRequirementSteps(steps []Step, eng engine.BuildEng
 // getBuildArtifactStep returns the artifact build step.
 func (p *GithubProvider) getBuildArtifactStep(cfg *config.Config) []Step {
 	if cfg.BuildRefinery != nil && cfg.BuildRefinery.Enabled {
-		return []Step{
-			{
-				Name: "Build Artifact using Local Refinery",
-				Run:  "./refinery-local build --artifact ${{ matrix.artifact }} --os ${{ matrix.os }} --arch ${{ matrix.arch }}${{ matrix.abi != '' && format(' --abi {0}', matrix.abi) || '' }}",
-			},
-		}
+		return []Step{{
+			Name: "Build Artifact using Local Refinery",
+			Run:  "./refinery-local build --artifact ${{ matrix.artifact }} --os ${{ matrix.os }} --arch ${{ matrix.arch }}${{ matrix.abi != '' && format(' --abi {0}', matrix.abi) || '' }}",
+		}}
 	}
-
-	return []Step{
-		{
-			Name: "Build Artifact",
-			Uses: ActionRefinery,
-			With: map[string]any{
-				"artifact": "${{ matrix.artifact }}",
-				"os":       "${{ matrix.os }}",
-				"arch":     "${{ matrix.arch }}",
-				"abi":      "${{ matrix.abi }}",
-				"version":  cfg.RefineryVersion,
-			},
+	return []Step{{
+		Name: "Build Artifact",
+		Uses: ActionRefinery,
+		With: map[string]any{
+			"artifact": "${{ matrix.artifact }}",
+			"os":       "${{ matrix.os }}",
+			"arch":     "${{ matrix.arch }}",
+			"abi":      "${{ matrix.abi }}",
+			"version":  cfg.RefineryVersion,
 		},
-	}
-}
-
-// addPreBuildSteps adds steps from [[pre_build]] config.
-func (p *GithubProvider) addPreBuildSteps(steps []Step, cfg *config.Config) []Step {
-	for _, step := range cfg.PreBuild {
-		steps = append(steps, p.createGithubStep(step, "Pre-Build"))
-	}
-	return steps
-}
-
-// addPostBuildSteps adds steps from [[post_build]] config.
-func (p *GithubProvider) addPostBuildSteps(steps []Step, cfg *config.Config) []Step {
-	for _, step := range cfg.PostBuild {
-		steps = append(steps, p.createGithubStep(step, "Post-Build"))
-	}
-	return steps
+	}}
 }
 
 func (p *GithubProvider) createGithubStep(step config.BuildStep, prefix string) Step {
-	// Resolve action name to full action path if needed
 	action := step.Action
 	if action != "" && !strings.Contains(action, "/") && !strings.HasSuffix(action, ".yml") {
 		action = fmt.Sprintf("./.github/actions/%s", action)
 	}
-
-	// Use action name as ID if not provided
 	id := step.ID
 	if id == "" && step.Action != "" {
-		// Extract name from action path
 		parts := strings.Split(step.Action, "/")
 		name := parts[len(parts)-1]
 		name = strings.TrimSuffix(name, ".yml")
 		id = name
 	}
-
-	ghStep := Step{
-		Name: fmt.Sprintf("%s: %s", prefix, id),
-	}
+	ghStep := Step{Name: fmt.Sprintf("%s: %s", prefix, id)}
 	if action != "" {
 		ghStep.Uses = action
 		ghStep.With = step.With
 	} else if len(step.Command) > 0 {
 		ghStep.Run = strings.Join(step.Command, "\n")
 	}
-
-	var conditions []string
 	if len(step.OS) > 0 {
-		var osConditions []string
+		var conditions []string
 		for _, osName := range step.OS {
 			switch strings.ToLower(osName) {
 			case "linux":
-				osConditions = append(osConditions, "runner.os == 'Linux'")
+				conditions = append(conditions, "runner.os == 'Linux'")
 			case "windows":
-				osConditions = append(osConditions, "runner.os == 'Windows'")
+				conditions = append(conditions, "runner.os == 'Windows'")
 			case "darwin", "macos":
-				osConditions = append(osConditions, "runner.os == 'macOS'")
+				conditions = append(conditions, "runner.os == 'macOS'")
 			}
 		}
-		if len(osConditions) > 0 {
-			conditions = append(conditions, fmt.Sprintf("(%s)", strings.Join(osConditions, " || ")))
+		if len(conditions) > 0 {
+			ghStep.If = strings.Join(conditions, " || ")
 		}
 	}
-
-	if step.Once {
-		conditions = append(conditions, "strategy.job-index == 0")
-	}
-
-	if len(conditions) > 0 {
-		ghStep.If = strings.Join(conditions, " && ")
-	}
-
 	return ghStep
 }
 
 // assembleJobs creates the jobs map for the workflow.
-func (p *GithubProvider) assembleJobs(include []map[string]any, buildSteps []Step) map[string]Job {
-	return map[string]Job{
-		"build": {
-			Name:   "Build ${{ matrix.artifact }} (${{ matrix.os }}-${{ matrix.arch }})",
-			RunsOn: "${{ matrix.runs_on }}",
-			Strategy: &Strategy{
-				FailFast: true,
-				Matrix:   map[string]any{"include": include},
-			},
-			Steps: buildSteps,
-		},
-		"release": {
-			Name:   "Release Artifacts",
+func (p *GithubProvider) assembleJobs(include []map[string]any, setup, build, teardown []Step) map[string]Job {
+	jobs := make(map[string]Job)
+	hasSetup := len(setup) > 1
+	hasTeardown := len(teardown) > 0
+
+	if hasSetup {
+		jobs["setup"] = Job{Name: "Setup and Global Checks", RunsOn: "ubuntu-latest", Steps: setup}
+	}
+
+	buildJob := Job{
+		Name:     "Build ${{ matrix.artifact }} (${{ matrix.os }}-${{ matrix.arch }})",
+		RunsOn:   "${{ matrix.runs_on }}",
+		Strategy: &Strategy{FailFast: true, Matrix: map[string]any{"include": include}},
+		Steps:    build,
+	}
+	if hasSetup {
+		buildJob.Needs = []string{"setup"}
+	}
+	jobs["build"] = buildJob
+
+	if hasTeardown {
+		jobs["teardown"] = Job{
+			Name:   "Global Post-Build Tasks",
 			Needs:  []string{"build"},
 			RunsOn: "ubuntu-latest",
-			If:     "startsWith(github.ref, 'refs/tags/')",
-			Steps: []Step{
-				{
-					Name: "Download Artifacts",
-					Uses: ActionDownloadArtifact,
-					With: map[string]any{
-						"path":           "./artifacts",
-						"merge-multiple": false,
-					},
-				},
-				{
-					Name: "List Artifacts",
-					Run:  "find ./artifacts -type f | sort",
-				},
-				{
-					Name: "Publish Release",
-					Uses: ActionGHRelease,
-					With: map[string]any{
-						"files":                   "./artifacts/**/*",
-						"fail_on_unmatched_files": true,
-					},
-					Env: map[string]string{
-						"GITHUB_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
-					},
-				},
+			Steps:  teardown,
+		}
+	}
+
+	releaseNeeds := []string{"build"}
+	if hasTeardown {
+		releaseNeeds = append(releaseNeeds, "teardown")
+	}
+
+	jobs["release"] = Job{
+		Name:   "Release Artifacts",
+		Needs:  releaseNeeds,
+		RunsOn: "ubuntu-latest",
+		If:     "startsWith(github.ref, 'refs/tags/')",
+		Steps: []Step{
+			{
+				Name: "Download Artifacts",
+				Uses: ActionDownloadArtifact,
+				With: map[string]any{"path": "./artifacts", "merge-multiple": true},
+			},
+			{Name: "List Artifacts", Run: "find ./artifacts -type f | sort"},
+			{
+				Name: "Publish Release",
+				Uses: ActionGHRelease,
+				With: map[string]any{"files": "./artifacts/**/*", "fail_on_unmatched_files": true},
+				Env:  map[string]string{"GITHUB_TOKEN": "${{ secrets.GITHUB_TOKEN }}"},
 			},
 		},
 	}
+	return jobs
 }

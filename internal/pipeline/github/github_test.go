@@ -1,6 +1,7 @@
 package github
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/SirCesarium/refinery/internal/config"
@@ -47,19 +48,37 @@ func TestAssembleJobs(t *testing.T) {
 	include := []map[string]any{
 		{"artifact": "test", "os": "linux", "arch": "x86_64", "runs_on": "ubuntu-latest"},
 	}
-	steps := []Step{
+	setupSteps := []Step{
+		{Name: "Checkout", Uses: "actions/checkout@v6"},
+		{Name: "Setup", Run: "echo setup"},
+	}
+	buildSteps := []Step{
 		{Name: "Test Step", Run: "echo test"},
 	}
+	teardownSteps := []Step{
+		{Name: "Checkout", Uses: "actions/checkout@v6"},
+		{Name: "Download", Uses: "actions/download-artifact@v8"},
+		{Name: "Teardown", Run: "echo teardown"},
+	}
 
-	jobs := p.assembleJobs(include, steps)
-	if len(jobs) != 2 {
-		t.Fatalf("expected 2 jobs, got %d", len(jobs))
+	jobs := p.assembleJobs(include, setupSteps, buildSteps, teardownSteps)
+	if len(jobs) != 4 {
+		t.Fatalf("expected 4 jobs (setup, build, teardown, release), got %d", len(jobs))
+	}
+	if _, ok := jobs["setup"]; !ok {
+		t.Error("expected 'setup' job")
 	}
 	if _, ok := jobs["build"]; !ok {
 		t.Error("expected 'build' job")
 	}
-	if _, ok := jobs["release"]; !ok {
-		t.Error("expected 'release' job")
+	if _, ok := jobs["teardown"]; !ok {
+		t.Error("expected 'teardown' job")
+	}
+	if len(jobs["build"].Needs) != 1 || jobs["build"].Needs[0] != "setup" {
+		t.Error("expected 'build' job to need 'setup'")
+	}
+	if len(jobs["teardown"].Needs) != 1 || jobs["teardown"].Needs[0] != "build" {
+		t.Error("expected 'teardown' job to need 'build'")
 	}
 }
 
@@ -139,7 +158,7 @@ func TestProviderGenerate(t *testing.T) {
 	}
 }
 
-func TestGetBuildSteps(t *testing.T) {
+func TestGetSplitSteps(t *testing.T) {
 	p, err := NewProvider("build")
 	if err != nil {
 		t.Fatalf("NewProvider returned error: %v", err)
@@ -153,37 +172,57 @@ func TestGetBuildSteps(t *testing.T) {
 			Name: "test-project",
 			Lang: "rust",
 		},
-	}
-
-	steps := p.getBuildSteps(mockEng, cfg)
-	if len(steps) == 0 {
-		t.Error("expected non-empty build steps")
-	}
-}
-
-func TestAddCIRequirementSteps(t *testing.T) {
-	p, err := NewProvider("build")
-	if err != nil {
-		t.Fatalf("NewProvider returned error: %v", err)
-	}
-
-	mockEng := &mockBuildEngineForGithub{
-		requirements: []string{"rust", "cargo-deb"},
-	}
-	cfg := &config.Config{
-		Project: config.Project{
-			Name: "test-project",
-			Lang: "rust",
+		BuildRefinery: &config.BuildRefineryConfig{Enabled: true},
+		PreBuild: []config.BuildStep{
+			{Action: "smoke-test", Once: true},
+			{Action: "other-test", Once: false},
+		},
+		PostBuild: []config.BuildStep{
+			{Action: "cleanup", Once: true},
 		},
 	}
 
-	steps := []Step{
-		{Name: "Checkout", Uses: "actions/checkout@v4"},
+	setup, build, teardown := p.getSplitSteps(mockEng, cfg)
+
+	// Check setup steps
+	foundGlobal := false
+	foundBuildRef := false
+	for _, s := range setup {
+		if strings.Contains(s.Name, "Global") {
+			foundGlobal = true
+		}
+		if s.Name == "Build Refinery from Source" {
+			foundBuildRef = true
+		}
+	}
+	if !foundGlobal {
+		t.Error("expected global pre-build step in setup")
+	}
+	if !foundBuildRef {
+		t.Error("expected refinery build step in setup")
 	}
 
-	newSteps := p.addCIRequirementSteps(steps, mockEng, cfg)
-	if len(newSteps) <= len(steps) {
-		t.Error("expected more steps after adding CI requirements")
+	// Check build steps
+	foundLocal := false
+	foundDownload := false
+	for _, s := range build {
+		if s.Name == "Pre-Build: other-test" {
+			foundLocal = true
+		}
+		if s.Name == "Download Local Refinery" {
+			foundDownload = true
+		}
+	}
+	if !foundLocal {
+		t.Error("expected matrix pre-build step in build")
+	}
+	if !foundDownload {
+		t.Error("expected refinery download step in build")
+	}
+
+	// Check teardown steps
+	if len(teardown) <= 2 { // Checkout + Download
+		t.Error("expected teardown steps to be populated")
 	}
 }
 
