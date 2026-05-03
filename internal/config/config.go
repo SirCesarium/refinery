@@ -35,6 +35,7 @@ type BuildStep struct {
 	Action  string         `toml:"action,omitempty" mapstructure:"action"`
 	OS      []string       `toml:"os,omitempty" mapstructure:"os"`
 	With    map[string]any `toml:"with,omitempty" mapstructure:"with"`
+	Once    bool           `toml:"once,omitempty" mapstructure:"once"`
 }
 
 // GetCIRequirements returns CI requirements from pre/post build steps.

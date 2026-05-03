@@ -165,9 +165,9 @@ func TestCreateGithubStepResolution(t *testing.T) {
 	p := &GithubProvider{}
 	cfg := &config.Config{
 		PreBuild: []config.BuildStep{
-			{Action: "smoke-test", With: map[string]any{"key": "value"}},
-			{Action: "custom/action@v1"},
-			{Action: "my-workflow.yml"},
+			{Action: "smoke-test", With: map[string]any{"key": "value"}, Once: true},
+			{Action: "custom/action@v1", OS: []string{"linux"}},
+			{Action: "my-workflow.yml", OS: []string{"windows", "linux"}, Once: true},
 		},
 	}
 
@@ -176,21 +176,22 @@ func TestCreateGithubStepResolution(t *testing.T) {
 		t.Fatalf("expected 3 steps, got %d", len(steps))
 	}
 
-	// Test local action resolution
+	// Test local action resolution and Once flag
 	if steps[0].Uses != "./.github/actions/smoke-test" {
 		t.Errorf("expected './.github/actions/smoke-test', got '%s'", steps[0].Uses)
 	}
-	if steps[0].With["key"] != "value" {
-		t.Errorf("expected with key 'value', got '%v'", steps[0].With["key"])
+	if steps[0].If != "strategy.job-index == 0" {
+		t.Errorf("expected if 'strategy.job-index == 0', got '%s'", steps[0].If)
 	}
 
-	// Test external action (should be unchanged)
-	if steps[1].Uses != "custom/action@v1" {
-		t.Errorf("expected 'custom/action@v1', got '%s'", steps[1].Uses)
+	// Test OS filtering
+	if steps[1].If != "(runner.os == 'Linux')" {
+		t.Errorf("expected if '(runner.os == 'Linux')', got '%s'", steps[1].If)
 	}
 
-	// Test explicit workflow (should be unchanged)
-	if steps[2].Uses != "my-workflow.yml" {
-		t.Errorf("expected 'my-workflow.yml', got '%s'", steps[2].Uses)
+	// Test combined OS and Once
+	expectedIf := "(runner.os == 'Windows' || runner.os == 'Linux') && strategy.job-index == 0"
+	if steps[2].If != expectedIf {
+		t.Errorf("expected if '%s', got '%s'", expectedIf, steps[2].If)
 	}
 }

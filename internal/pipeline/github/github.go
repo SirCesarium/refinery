@@ -310,22 +310,32 @@ func (p *GithubProvider) createGithubStep(step config.BuildStep, prefix string) 
 		ghStep.Run = strings.Join(step.Command, "\n")
 	}
 
+	var conditions []string
 	if len(step.OS) > 0 {
-		var conditions []string
+		var osConditions []string
 		for _, osName := range step.OS {
 			switch strings.ToLower(osName) {
 			case "linux":
-				conditions = append(conditions, "runner.os == 'Linux'")
+				osConditions = append(osConditions, "runner.os == 'Linux'")
 			case "windows":
-				conditions = append(conditions, "runner.os == 'Windows'")
+				osConditions = append(osConditions, "runner.os == 'Windows'")
 			case "darwin", "macos":
-				conditions = append(conditions, "runner.os == 'macOS'")
+				osConditions = append(osConditions, "runner.os == 'macOS'")
 			}
 		}
-		if len(conditions) > 0 {
-			ghStep.If = strings.Join(conditions, " || ")
+		if len(osConditions) > 0 {
+			conditions = append(conditions, fmt.Sprintf("(%s)", strings.Join(osConditions, " || ")))
 		}
 	}
+
+	if step.Once {
+		conditions = append(conditions, "strategy.job-index == 0")
+	}
+
+	if len(conditions) > 0 {
+		ghStep.If = strings.Join(conditions, " && ")
+	}
+
 	return ghStep
 }
 
