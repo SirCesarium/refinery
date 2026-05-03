@@ -37,7 +37,7 @@ runs:
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install -y qemu-user-static gcc-aarch64-linux-gnu gcc-i686-linux-gnu libc6-dev-i386 musl-tools
+        sudo apt-get install -y qemu-user-static gcc-aarch64-linux-gnu gcc-i686-linux-gnu libc6-dev-i386 musl-tools gcc-mingw-w64
         curl https://wasmtime.dev/install.sh -sSf | bash
         echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
 
