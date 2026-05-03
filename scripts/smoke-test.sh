@@ -9,67 +9,93 @@ cd tests/smoke/rust-project
 rm -rf dist logs
 mkdir -p logs
 
-declare -A TARGETS
-TARGETS["linux"]="x86_64:gnu x86_64:musl i686:gnu aarch64:gnu"
-if [[ "$(uname -s)" == "MINGW"* || "$(uname -s)" == "CYGWIN"* || "$(uname -s)" == "MSYS"* ]]; then
-    TARGETS["windows"]="x86_64:msvc i686:msvc"
-else
-    TARGETS["windows"]="x86_64:gnu i686:gnu"
-fi
-TARGETS["wasi"]="wasm32"
+# Use strings to store PIDs and metadata for cross-shell compatibility
+PIDS=""
+NAMES=""
+LOGS=""
 
-PIDS=()
-LOGS=()
-NAMES=()
+add_pid() { PIDS="$PIDS $1"; }
+add_name() { NAMES="$NAMES $1"; }
+add_log() { LOGS="$LOGS $1"; }
 
-for os in "${!TARGETS[@]}"; do
+for os in linux windows wasi; do
     if [ -n "$FILTER_OS" ] && [[ "$FILTER_OS" != *"$os"* ]]; then
         continue
     fi
-    for arch_abi in ${TARGETS[$os]}; do
-        arch=$(echo $arch_abi | cut -d: -f1)
-        abi=$(echo $arch_abi | cut -d: -f2 -s)
+
+    targets=""
+    if [ "$os" = "linux" ]; then
+        targets="x86_64:gnu x86_64:musl i686:gnu aarch64:gnu"
+    elif [ "$os" = "windows" ]; then
+        UNAME_S=$(uname -s)
+        if [[ "$UNAME_S" == "MINGW"* || "$UNAME_S" == "CYGWIN"* || "$UNAME_S" == "MSYS"* ]]; then
+            targets="x86_64:msvc i686:msvc"
+        else
+            targets="x86_64:gnu i686:gnu"
+        fi
+    elif [ "$os" = "wasi" ]; then
+        targets="wasm32"
+    else
+        continue
+    fi
+
+    for arch_abi in $targets; do
+        arch=$(echo "$arch_abi" | cut -d: -f1)
+        abi=$(echo "$arch_abi" | cut -d: -f2 -s)
         
         EXTRA_RUSTFLAGS=""
-        [ "$os" = "windows" ] && EXTRA_RUSTFLAGS="-C link-args=-static"
+        if [ "$os" = "windows" ]; then
+            EXTRA_RUSTFLAGS="-C link-args=-static"
+        fi
         
-        # Build bin
+        # Build binary artifact
         name_bin="bin-$os-$arch-$abi"
         args="--artifact smoke-bin --os $os --arch $arch"
-        [ -n "$abi" ] && args="$args --abi $abi"
+        if [ -n "$abi" ]; then
+            args="$args --abi $abi"
+        fi
         RUSTFLAGS="$EXTRA_RUSTFLAGS" "$REFINERY_BIN" build $args > "logs/$name_bin.log" 2>&1 &
-        PIDS+=($!)
-        LOGS+=("logs/$name_bin.log")
-        NAMES+=("$name_bin")
+        add_pid $!
+        add_log "logs/$name_bin.log"
+        add_name "$name_bin"
         
-        # Build lib
+        # Build library artifact
         name_lib="lib-$os-$arch-$abi"
         args_lib="--artifact smoke-lib --os $os --arch $arch"
-        [ -n "$abi" ] && args_lib="$args_lib --abi $abi"
+        if [ -n "$abi" ]; then
+            args_lib="$args_lib --abi $abi"
+        fi
         RUSTFLAGS="$EXTRA_RUSTFLAGS" "$REFINERY_BIN" build $args_lib > "logs/$name_lib.log" 2>&1 &
-        PIDS+=($!)
-        LOGS+=("logs/$name_lib.log")
-        NAMES+=("$name_lib")
+        add_pid $!
+        add_log "logs/$name_lib.log"
+        add_name "$name_lib"
     done
 done
 
-echo "Waiting for builds (${#PIDS[@]}) to complete..."
+echo "Waiting for builds to complete..."
 FAILED=0
-for i in "${!PIDS[@]}"; do
-    if ! wait ${PIDS[$i]}; then
-        echo "FAILED: ${NAMES[$i]}"
-        cat "${LOGS[$i]}"
+i=0
+PID_LIST=($PIDS)
+NAME_LIST=($NAMES)
+LOG_LIST=($LOGS)
+
+for pid in "${PID_LIST[@]}"; do
+    if ! wait "$pid"; then
+        echo "FAILED: ${NAME_LIST[$i]}"
+        cat "${LOG_LIST[$i]}"
         FAILED=1
     fi
+    i=$((i + 1))
 done
 
-[ $FAILED -eq 1 ] && exit 1
+if [ $FAILED -eq 1 ]; then
+    exit 1
+fi
 
-# 1. Verify Header Content
+# Verify generated header
 HEADER="dist/smoke-test.h"
 grep -q "smoke_test_fn" "$HEADER" && echo "Header content: VALID"
 
-# 2. Runtime Verification
 check_exec() {
     local bin=$1
     local cmd=$2
@@ -88,15 +114,21 @@ check_exec() {
     fi
 }
 
-# Only run tests for OSes that were built (respect FILTER_OS)
+# Execution tests
 if [ -z "$FILTER_OS" ] || [[ "$FILTER_OS" == *"linux"* ]]; then
     check_exec "smoke-bin-linux-x86_64-gnu" ""
-    [ -x "$(command -v qemu-i386)" ] && check_exec "smoke-bin-linux-i686-gnu" "qemu-i386"
-    [ -x "$(command -v qemu-aarch64)" ] && check_exec "smoke-bin-linux-aarch64-gnu" "qemu-aarch64 -L /usr/aarch64-linux-gnu"
+    if [ -x "$(command -v qemu-i386)" ]; then
+        check_exec "smoke-bin-linux-i686-gnu" "qemu-i386"
+    fi
+    if [ -x "$(command -v qemu-aarch64)" ]; then
+        check_exec "smoke-bin-linux-aarch64-gnu" "qemu-aarch64 -L /usr/aarch64-linux-gnu"
+    fi
 fi
 
 if [ -z "$FILTER_OS" ] || [[ "$FILTER_OS" == *"wasi"* ]]; then
-    [ -x "$(command -v wasmtime)" ] && check_exec "smoke-bin-wasi-wasm32.wasm" "wasmtime"
+    if [ -x "$(command -v wasmtime)" ]; then
+        check_exec "smoke-bin-wasi-wasm32.wasm" "wasmtime"
+    fi
 fi
 
 if [ -z "$FILTER_OS" ] || [[ "$FILTER_OS" == *"windows"* ]]; then
@@ -104,7 +136,7 @@ if [ -z "$FILTER_OS" ] || [[ "$FILTER_OS" == *"windows"* ]]; then
     [ -f "dist/smoke-bin-windows-i686-msvc.exe" ] && echo "smoke-bin-windows-i686-msvc.exe: OK"
 fi
 
-# 3. Verify existence
+# Package existence check
 if [ -z "$FILTER_OS" ] || [[ "$FILTER_OS" == *"linux"* ]]; then
     [ -f "dist/smoke-bin-0.1.0-linux-x86_64-gnu.deb" ] && echo ".deb: OK"
     [ -f "dist/smoke-bin-0.1.0-linux-x86_64-gnu.rpm" ] && echo ".rpm: OK"
