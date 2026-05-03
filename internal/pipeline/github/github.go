@@ -106,7 +106,7 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 func (p *GithubProvider) getSplitSteps(eng engine.BuildEngine, cfg *config.Config) (setup, build, teardown []Step) {
 	buildRefinery := cfg.BuildRefinery != nil && cfg.BuildRefinery.Enabled
 
-	// 1. Setup Stage (Global Pre-Build / Smoke Test)
+	// 1. Setup Stage (Global Pre-Build)
 	setup = append(setup, Step{Name: "Checkout", Uses: ActionCheckout})
 	setup = p.addCIRequirementSteps(setup, eng, cfg)
 
@@ -142,6 +142,13 @@ func (p *GithubProvider) getSplitSteps(eng engine.BuildEngine, cfg *config.Confi
 
 	build = append(build, p.getBuildArtifactStep(cfg)...)
 
+	for _, step := range cfg.PostBuild {
+		if !step.Once {
+			build = append(build, p.createGithubStep(step, "Post-Build"))
+		}
+	}
+
+	// 3. Teardown Stage (Global Post-Build)
 	hasGlobalPost := false
 	for _, s := range cfg.PostBuild {
 		if s.Once {
@@ -150,21 +157,6 @@ func (p *GithubProvider) getSplitSteps(eng engine.BuildEngine, cfg *config.Confi
 		}
 	}
 
-	if hasGlobalPost {
-		build = append(build, Step{
-			Name: "Internal Upload for Teardown",
-			Uses: ActionUploadArtifact,
-			With: map[string]any{"name": "dist-${{ strategy.job-index }}", "path": "dist", "retention-days": 1},
-		})
-	}
-
-	for _, step := range cfg.PostBuild {
-		if !step.Once {
-			build = append(build, p.createGithubStep(step, "Post-Build"))
-		}
-	}
-
-	// 3. Teardown Stage
 	if hasGlobalPost {
 		teardown = append(teardown, Step{Name: "Checkout", Uses: ActionCheckout})
 		teardown = append(teardown, Step{
@@ -321,10 +313,13 @@ func (p *GithubProvider) getBuildArtifactStep(cfg *config.Config) []Step {
 }
 
 func (p *GithubProvider) createGithubStep(step config.BuildStep, prefix string) Step {
+	// Resolve action name to full action path if needed
 	action := step.Action
 	if action != "" && !strings.Contains(action, "/") && !strings.HasSuffix(action, ".yml") {
 		action = fmt.Sprintf("./.github/actions/%s", action)
 	}
+
+	// Use action name as ID if not provided
 	id := step.ID
 	if id == "" && step.Action != "" {
 		parts := strings.Split(step.Action, "/")
@@ -332,6 +327,7 @@ func (p *GithubProvider) createGithubStep(step config.BuildStep, prefix string) 
 		name = strings.TrimSuffix(name, ".yml")
 		id = name
 	}
+
 	ghStep := Step{Name: fmt.Sprintf("%s: %s", prefix, id)}
 	if action != "" {
 		ghStep.Uses = action

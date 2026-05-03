@@ -20,8 +20,7 @@ with = { refinery_bin = "./refinery-local" }
 
 [[post_build]]
 action = "upload-artifacts"
-once = true
-with = { name = "all-platforms-binaries", path = "artifacts" }
+with = { name = "bin-${{ matrix.artifact }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}", path = "dist" }
 
 [artifacts.refinery]
 type = "bin"
