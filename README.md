@@ -47,20 +47,26 @@
 ## Architecture & Ecosystems
 
 ### Why an Orchestrator?
+
 Refinery abstracts underlying build tools. Instead of writing complex CI scripts per project, you define **what** to build and **where** to distribute. Refinery handles the **how** by orchestrating compilers (like Cargo) and system packagers.
 
 ### ABIs: GNU vs. MUSL vs. MSVC
+
 Refinery allows targeting specific ABIs for cross-platform compatibility:
+
 - **MSVC (Windows):** The standard for Windows development using the Microsoft Visual C++ runtime.
 - **GNU (Linux/Windows):** Uses the GNU C Library (glibc). Standard for most desktop/server Linux.
 - **MUSL (Linux):** A lightweight C library. Essential for creating **fully static binaries** that run on any Linux distribution (like Alpine) without external dependencies.
 
 ### WebAssembly & WASI
+
 - **WASM (`wasm32-unknown-unknown`):** For running code in web browsers.
 - **WASI (`wasm32-wasip1`):** A system interface for running WebAssembly outside the browser (servers, edge), providing controlled access to system resources.
 
 ### SDK Bundling (Archives for Libraries)
+
 When a `lib` artifact specifies `zip` or `tar.gz`, Refinery creates an **SDK Bundle**:
+
 1. **Multi-format inclusion:** Automatically groups all built types (e.g., both `.so` and `.a`) into the same archive.
 2. **Automatic Headers:** If `headers = true`, Refinery scans and includes all `.h` and `.hpp` files.
 3. **Distribution-Ready:** Provides everything a developer needs to link against your library in a single download.
@@ -79,13 +85,17 @@ Download the binary for your system from the [Releases](https://github.com/SirCe
 
 ## Command Reference
 
-| Command   | Description                | Details                                              |
-| :-------- | :------------------------- | :--------------------------------------------------- |
-| `init`    | Initialize project         | Creates a template `refinery.toml`.                  |
-| `build`   | Compile & Package          | Executes building and packaging for a target.        |
-| `migrate` | Generate CI workflow       | Generates CI provider files (e.g., GitHub).          |
+| Command   | Description          | Details                                             |
+| :-------- | :------------------- | :-------------------------------------------------- |
+| `init`    | Initialize project   | Creates a template `refinery.toml`.                 |
+| `build`   | Compile & Package    | Executes building and packaging for a target.       |
+| `migrate` | Generate CI workflow | Validates and generates CI pipelines (GitHub, etc). |
 
-**Options:**
+**`init`:** Creates a `refinery.toml` configuration file for the project.
+
+**`migrate`:** Validates `refinery.toml` against the engine (e.g., Rust/Cargo.toml match) before writing workflows. Supports `--dry-run`.
+
+**`build` options:**
 
 - `--artifact`: Artifact name from configuration.
 - `--os`: Target operating system.
