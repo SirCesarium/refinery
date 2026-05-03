@@ -45,11 +45,8 @@ var migrateCmd = &cobra.Command{
 
 		// Run Rust-specific validation if applicable.
 		if cfg.Project.Lang == "rust" {
-			if rustEngine, ok := eng.(*rust.RustEngine); ok {
-				ui.Info("Running Rust-specific validation...")
-				if err := rustEngine.ValidateRustSpecific(cfg); err != nil {
-					ui.Fatal(err, "Rust validation failed. Check Cargo.toml matches refinery.toml")
-				}
+			if err := validateRustEngine(eng, cfg); err != nil {
+				ui.Fatal(err, "Rust validation failed. Check Cargo.toml matches refinery.toml")
 			}
 		}
 
@@ -102,4 +99,13 @@ var migrateCmd = &cobra.Command{
 func init() {
 	migrateCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview generated workflow without writing")
 	rootCmd.AddCommand(migrateCmd)
+}
+
+// validateRustEngine performs Rust-specific validation if the engine is Rust.
+func validateRustEngine(eng interface{}, cfg *config.Config) error {
+	if rustEngine, ok := eng.(*rust.RustEngine); ok {
+		ui.Info("Running Rust-specific validation...")
+		return rustEngine.ValidateRustSpecific(cfg)
+	}
+	return nil
 }

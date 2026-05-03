@@ -25,33 +25,15 @@ func (e *RustEngine) build(cfg *config.Config, art *config.ArtifactConfig, opts 
 		return err
 	}
 
-	profile := "release"
-	if p, ok := bestMatch.LangOpts["profile"].(string); ok {
-		profile = p
-	}
-
+	profile := e.getProfile(*bestMatch)
 	if err := e.setupEnvironment(art, opts.OS, opts.Arch, opts.ABI, targetTriple); err != nil {
 		return err
 	}
 
 	version := manifest.Package.Version
-
-	ext := ""
-	if art.Type == "bin" {
-		ext, _ = e.getExtAndPrefix(opts.OS, opts.ABI, art.Type, "bin")
-	} else if len(art.LibraryTypes) > 0 {
-		ext, _ = e.getExtAndPrefix(opts.OS, opts.ABI, art.Type, art.LibraryTypes[0])
-	} else {
-		ext, _ = e.getExtAndPrefix(opts.OS, opts.ABI, art.Type, "cdylib")
-	}
-	binaryName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, version, opts.ABI, ext)
-	binaryPath := filepath.Join(cfg.OutputDir, binaryName)
-
-	resolvedHooks := art.Hooks.ResolveAll(opts.ArtifactName, opts.OS, opts.Arch, version, opts.ABI, binaryPath)
-	for _, hook := range resolvedHooks.PreBuild {
-		if err := e.runHook(hook); err != nil {
-			return fmt.Errorf("pre-build hook failed: %w", err)
-		}
+	_, binaryPath := e.resolveBinaryInfo(cfg, art, opts, manifest, targetTriple, profile)
+	if err := e.runHooks(art, opts, binaryPath, version, "PreBuild"); err != nil {
+		return err
 	}
 
 	if err := e.addTarget(targetTriple); err != nil {
@@ -66,12 +48,55 @@ func (e *RustEngine) build(cfg *config.Config, art *config.ArtifactConfig, opts 
 		return err
 	}
 
-	for _, hook := range resolvedHooks.PostBuild {
-		if err := e.runHook(hook); err != nil {
-			return fmt.Errorf("post-build hook failed: %w", err)
-		}
+	return e.runHooks(art, opts, binaryPath, version, "PostBuild")
+}
+
+// getProfile extracts the build profile from target config.
+func (e *RustEngine) getProfile(tCfg config.TargetConfig) string {
+	profile := "release"
+	if p, ok := tCfg.LangOpts["profile"].(string); ok {
+		profile = p
+	}
+	return profile
+}
+
+// resolveBinaryInfo returns the binary name and full path based on naming config.
+func (e *RustEngine) resolveBinaryInfo(cfg *config.Config, art *config.ArtifactConfig, opts engine.BuildOptions, manifest *cargoManifest, targetTriple, profile string) (string, string) {
+	version := manifest.Package.Version
+	ext := e.getBinaryExt(art, opts.OS, opts.ABI)
+	binaryName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, version, opts.ABI, ext)
+	return binaryName, filepath.Join(cfg.OutputDir, binaryName)
+}
+
+// getBinaryExt determines the file extension for the binary based on OS and type.
+func (e *RustEngine) getBinaryExt(art *config.ArtifactConfig, osName, abi string) string {
+	ext := ""
+	if art.Type == "bin" {
+		ext, _ = e.getExtAndPrefix(osName, abi, art.Type, "bin")
+	} else if len(art.LibraryTypes) > 0 {
+		ext, _ = e.getExtAndPrefix(osName, abi, art.Type, art.LibraryTypes[0])
+	} else {
+		ext, _ = e.getExtAndPrefix(osName, abi, art.Type, "cdylib")
+	}
+	return ext
+}
+
+// runHooks executes either pre-build or post-build hooks.
+func (e *RustEngine) runHooks(art *config.ArtifactConfig, opts engine.BuildOptions, binaryPath, version, hookType string) error {
+	resolvedHooks := art.Hooks.ResolveAll(opts.ArtifactName, opts.OS, opts.Arch, version, opts.ABI, binaryPath)
+
+	var hooks []string
+	if hookType == "PreBuild" {
+		hooks = resolvedHooks.PreBuild
+	} else {
+		hooks = resolvedHooks.PostBuild
 	}
 
+	for _, hook := range hooks {
+		if err := e.runHook(hook); err != nil {
+			return fmt.Errorf("%s hook failed: %w", strings.ToLower(hookType), err)
+		}
+	}
 	return nil
 }
 

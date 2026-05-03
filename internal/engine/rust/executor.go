@@ -138,57 +138,94 @@ func (e *RustEngine) runCargoPackager(command string, args []string) error {
 // setupEnvironment configures linker and SDK variables for cross-compilation.
 func (e *RustEngine) setupEnvironment(art *config.ArtifactConfig, osName, arch, abi, target string) error {
 	bestMatch := e.getBestMatch(art, osName, arch, abi)
+	linker := e.getLinkerFromConfig(bestMatch, osName, arch)
 
-	linker := ""
-	if bestMatch != nil {
-		if l, ok := bestMatch.LangOpts["linker"].(string); ok {
-			linker = l
-		}
-
-		if depTarget, ok := bestMatch.LangOpts["deployment_target"].(string); ok {
-			if err := os.Setenv("MACOSX_DEPLOYMENT_TARGET", depTarget); err != nil {
-				return fmt.Errorf("failed to set MACOSX_DEPLOYMENT_TARGET: %w", err)
-			}
-		}
-		if sdk, ok := bestMatch.LangOpts["sdk_root"].(string); ok {
-			if err := os.Setenv("SDKROOT", sdk); err != nil {
-				return fmt.Errorf("failed to set SDKROOT: %w", err)
-			}
-		}
+	if err := e.setupMacOSVars(bestMatch); err != nil {
+		return err
 	}
 
-	if linker == "" && osName == "linux" {
+	if linker == "" {
+		linker = e.getDefaultLinker(osName, arch)
+	}
+
+	if err := e.setupLinkerEnv(linker, arch, target); err != nil {
+		return err
+	}
+
+	return e.setupDefaultMacOSDeployment()
+}
+
+// getLinkerFromConfig extracts linker setting from target config.
+func (e *RustEngine) getLinkerFromConfig(tCfg *config.TargetConfig, osName, arch string) string {
+	if tCfg == nil {
+		return ""
+	}
+	if l, ok := tCfg.LangOpts["linker"].(string); ok {
+		return l
+	}
+	return ""
+}
+
+// setupMacOSVars configures deployment target and SDK root from config.
+func (e *RustEngine) setupMacOSVars(tCfg *config.TargetConfig) error {
+	if tCfg == nil {
+		return nil
+	}
+	if depTarget, ok := tCfg.LangOpts["deployment_target"].(string); ok {
+		if err := os.Setenv("MACOSX_DEPLOYMENT_TARGET", depTarget); err != nil {
+			return fmt.Errorf("failed to set MACOSX_DEPLOYMENT_TARGET: %w", err)
+		}
+	}
+	if sdk, ok := tCfg.LangOpts["sdk_root"].(string); ok {
+		if err := os.Setenv("SDKROOT", sdk); err != nil {
+			return fmt.Errorf("failed to set SDKROOT: %w", err)
+		}
+	}
+	return nil
+}
+
+// getDefaultLinker returns a default linker based on OS and arch.
+func (e *RustEngine) getDefaultLinker(osName, arch string) string {
+	if osName == "linux" {
 		if strings.Contains(arch, "aarch64") {
-			linker = "aarch64-linux-gnu-gcc"
+			return "aarch64-linux-gnu-gcc"
 		} else if strings.Contains(arch, "i686") {
-			linker = "i686-linux-gnu-gcc"
+			return "i686-linux-gnu-gcc"
 		}
 	}
+	return ""
+}
 
-	if linker != "" {
-		isArmLinker := strings.Contains(linker, "aarch64") || strings.Contains(linker, "arm")
-		isArmTarget := strings.Contains(arch, "aarch64") || strings.Contains(arch, "arm")
-		isX64Linker := strings.Contains(linker, "x86_64") || strings.Contains(linker, "x64")
-		isX64Target := strings.Contains(arch, "x86_64") || strings.Contains(arch, "x64")
-
-		shouldApply := true
-		if (isArmLinker && !isArmTarget) || (isX64Linker && !isX64Target) {
-			shouldApply = false
-		}
-
-		if shouldApply {
-			envKey := fmt.Sprintf("CARGO_TARGET_%s_LINKER",
-				strings.ReplaceAll(strings.ReplaceAll(strings.ToUpper(target), "-", "_"), ".", "_"))
-			if err := os.Setenv(envKey, linker); err != nil {
-				return fmt.Errorf("failed to set linker env %s: %w", envKey, err)
-			}
-		}
+// setupLinkerEnv sets the CARGO_TARGET_<triple>_LINKER environment variable.
+func (e *RustEngine) setupLinkerEnv(linker, arch, target string) error {
+	if linker == "" {
+		return nil
 	}
 
-	if osName == "darwin" && os.Getenv("MACOSX_DEPLOYMENT_TARGET") == "" {
-		if err := os.Setenv("MACOSX_DEPLOYMENT_TARGET", "11.0"); err != nil {
-			return fmt.Errorf("failed to set default MACOSX_DEPLOYMENT_TARGET: %w", err)
+	isArmLinker := strings.Contains(linker, "aarch64") || strings.Contains(linker, "arm")
+	isArmTarget := strings.Contains(arch, "aarch64") || strings.Contains(arch, "arm")
+	isX64Linker := strings.Contains(linker, "x86_64") || strings.Contains(linker, "x64")
+	isX64Target := strings.Contains(arch, "x86_64") || strings.Contains(arch, "x64")
+
+	shouldApply := true
+	if (isArmLinker && !isArmTarget) || (isX64Linker && !isX64Target) {
+		shouldApply = false
+	}
+
+	if shouldApply {
+		envKey := fmt.Sprintf("CARGO_TARGET_%s_LINKER",
+			strings.ReplaceAll(strings.ReplaceAll(strings.ToUpper(target), "-", "_"), ".", "_"))
+		if err := os.Setenv(envKey, linker); err != nil {
+			return fmt.Errorf("failed to set linker env %s: %w", envKey, err)
 		}
+	}
+	return nil
+}
+
+// setupDefaultMacOSDeployment sets a default deployment target for macOS.
+func (e *RustEngine) setupDefaultMacOSDeployment() error {
+	if os.Getenv("MACOSX_DEPLOYMENT_TARGET") == "" {
+		return os.Setenv("MACOSX_DEPLOYMENT_TARGET", "11.0")
 	}
 	return nil
 }

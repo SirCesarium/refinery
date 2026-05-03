@@ -80,28 +80,42 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 		return nil, err
 	}
 
-	var artifactNames []string
-	for name := range cfg.Artifacts {
-		artifactNames = append(artifactNames, name)
-	}
-	sort.Strings(artifactNames)
+	include := p.buildMatrix(cfg)
+	buildSteps := p.getBuildSteps(eng, cfg)
+	jobs := p.assembleJobs(include, buildSteps)
 
+	wf := Workflow{
+		Name: "Refinery Build",
+		On: On{
+			Push: &Event{Tags: []string{"v*"}},
+			Release: map[string]any{
+				"types": []string{"created"},
+			},
+		},
+		Permissions: map[string]string{
+			"contents": "write",
+			"packages": "write",
+		},
+		Jobs: jobs,
+	}
+
+	return yaml.Marshal(wf)
+}
+
+// buildMatrix creates the matrix include array from config artifacts and targets.
+func (p *GithubProvider) buildMatrix(cfg *config.Config) []map[string]any {
 	var include []map[string]any
 	uniqueMatrix := make(map[string]bool)
 
-	for _, aName := range artifactNames {
+	for _, aName := range p.sortedArtifactNames(cfg) {
 		art := cfg.Artifacts[aName]
 		for _, tCfg := range art.Targets {
-			runsOn := "ubuntu-latest"
-			switch tCfg.OS {
-			case "windows":
-				runsOn = "windows-latest"
-			case "darwin":
-				runsOn = "macos-latest"
-			}
-
+			runsOn := p.getRunsOn(tCfg.OS)
 			for _, arch := range tCfg.Archs {
 				abis := tCfg.ABIs
+				if len(abis) == 0 {
+					abis = []string{""}
+				}
 				for _, abi := range abis {
 					key := fmt.Sprintf("%s-%s-%s-%s", aName, tCfg.OS, arch, abi)
 					if uniqueMatrix[key] {
@@ -123,77 +137,117 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 			}
 		}
 	}
+	return include
+}
 
-	buildSteps := []Step{
+// sortedArtifactNames returns artifact names in sorted order.
+func (p *GithubProvider) sortedArtifactNames(cfg *config.Config) []string {
+	var names []string
+	for name := range cfg.Artifacts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// getRunsOn maps OS to GitHub Actions runner labels.
+func (p *GithubProvider) getRunsOn(osName string) string {
+	switch osName {
+	case "windows":
+		return "windows-latest"
+	case "darwin":
+		return "macos-latest"
+	default:
+		return "ubuntu-latest"
+	}
+}
+
+// getBuildSteps assembles the list of steps for the build job.
+func (p *GithubProvider) getBuildSteps(eng engine.BuildEngine, cfg *config.Config) []Step {
+	steps := []Step{
 		{Name: "Checkout", Uses: ActionCheckout},
 	}
+	steps = p.addCIRequirementSteps(steps, eng, cfg)
+	steps = append(steps, p.getBuildAndUploadSteps(eng, cfg)...)
+	return steps
+}
 
+// addCIRequirementSteps adds steps based on engine requirements.
+func (p *GithubProvider) addCIRequirementSteps(steps []Step, eng engine.BuildEngine, cfg *config.Config) []Step {
 	for _, req := range eng.GetCIRequirements(cfg) {
 		switch {
 		case req == "rust":
-			buildSteps = append(buildSteps, Step{
+			steps = append(steps, Step{
 				Name: "Setup Rust",
 				Uses: ActionRustToolchain,
 				With: map[string]any{"cache": true},
 			})
 		case req == "cross-linker:linux-aarch64":
-			buildSteps = append(buildSteps, Step{
+			steps = append(steps, Step{
 				Name: "Install ARM Linker",
 				If:   "runner.os == 'Linux'",
 				Run:  "sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu",
 			})
 		case req == "pkg:musl-tools":
-			buildSteps = append(buildSteps, Step{
+			steps = append(steps, Step{
 				Name: "Install Musl Tools",
 				If:   "runner.os == 'Linux'",
 				Run:  "sudo apt-get update && sudo apt-get install -y musl-tools",
 			})
 		case req == "pkg:cargo-deb":
-			buildSteps = append(buildSteps, Step{
+			steps = append(steps, Step{
 				Name: "Install cargo-deb",
 				If:   "runner.os == 'Linux'",
 				Run:  "cargo install cargo-deb",
 			})
 		case req == "pkg:cargo-generate-rpm":
-			buildSteps = append(buildSteps, Step{
+			steps = append(steps, Step{
 				Name: "Install cargo-generate-rpm",
 				If:   "runner.os == 'Linux'",
 				Run:  "cargo install cargo-generate-rpm",
 			})
 		case req == "pkg:cargo-wix":
-			buildSteps = append(buildSteps, Step{
+			steps = append(steps, Step{
 				Name: "Install cargo-wix",
 				If:   "runner.os == 'Windows'",
 				Run:  "cargo install cargo-wix",
 			})
 		}
 	}
+	return steps
+}
 
-	buildSteps = append(buildSteps, Step{
-		Name: "Build Artifact",
-		Uses: "SirCesarium/refinery@main",
-		With: map[string]any{
-			"artifact": "${{ matrix.artifact }}",
-			"os":       "${{ matrix.os }}",
-			"arch":     "${{ matrix.arch }}",
-			"abi":      "${{ matrix.abi }}",
-			"version":  cfg.RefineryVersion,
+// getBuildAndUploadSteps returns the build artifact and upload steps.
+func (p *GithubProvider) getBuildAndUploadSteps(eng engine.BuildEngine, cfg *config.Config) []Step {
+	return []Step{
+		{
+			Name: "Build Artifact",
+			Uses: "SirCesarium/refinery@main",
+			With: map[string]any{
+				"artifact": "${{ matrix.artifact }}",
+				"os":       "${{ matrix.os }}",
+				"arch":     "${{ matrix.arch }}",
+				"abi":      "${{ matrix.abi }}",
+				"version":  cfg.RefineryVersion,
+			},
 		},
-	})
-
-	buildSteps = append(buildSteps, Step{
-		Name: "Upload",
-		Uses: ActionUploadArtifact,
-		With: map[string]any{
-			"name":              "bin-${{ matrix.artifact }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}",
-			"path":              cfg.OutputDir,
-			"if-no-files-found": "error",
-			"compression-level": 0,
-			"overwrite":         false,
+		{
+			Name: "Upload",
+			Uses: ActionUploadArtifact,
+			With: map[string]any{
+				"name":              "bin-${{ matrix.artifact }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}",
+				"path":              cfg.OutputDir,
+				"if-no-files-found": "error",
+				"compression-level": 0,
+				"overwrite":         false,
+			},
 		},
-	})
+	}
+}
 
-	jobs := map[string]Job{
+// assembleJobs creates the jobs map for the workflow.
+func (p *GithubProvider) assembleJobs(include []map[string]any, buildSteps []Step) map[string]Job {
+	return map[string]Job{
 		"build": {
 			Name:   "Build ${{ matrix.artifact }} (${{ matrix.os }}-${{ matrix.arch }})",
 			RunsOn: "${{ matrix.runs_on }}",
@@ -235,21 +289,4 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 			},
 		},
 	}
-
-	wf := Workflow{
-		Name: "Refinery Build",
-		On: On{
-			Push: &Event{Tags: []string{"v*"}},
-			Release: map[string]any{
-				"types": []string{"created"},
-			},
-		},
-		Permissions: map[string]string{
-			"contents": "write",
-			"packages": "write",
-		},
-		Jobs: jobs,
-	}
-
-	return yaml.Marshal(wf)
 }

@@ -14,74 +14,80 @@ import (
 
 // pkg dispatches packaging to the correct format handler (deb, rpm, msi, etc.).
 func (e *RustEngine) pkg(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi, format string) error {
-	manifest, err := e.loadManifest()
-	if err != nil {
-		return err
-	}
-
 	switch format {
-	case "deb":
-		if osName != "linux" || abi == "musl" || arch == "wasm32" {
-			return fmt.Errorf("deb packaging is only supported for linux (non-musl, non-wasm)")
-		}
-
-		if _, err := exec.LookPath("cargo-deb"); err != nil {
-			return fmt.Errorf("cargo-deb not found. Install it with: cargo install cargo-deb")
-		}
-
-		bestMatch := e.getBestMatch(art, osName, arch, abi)
-		if bestMatch == nil {
-			return fmt.Errorf("no matching target found for %s-%s-%s", osName, arch, abi)
-		}
-
-		target := e.resolveTarget(*bestMatch, arch, abi)
-
-		return e.runCargoPackager("deb", []string{"--target", target})
-	case "rpm":
-		if osName != "linux" || abi == "musl" || arch == "wasm32" {
-			return fmt.Errorf("rpm packaging is only supported for linux (non-musl, non-wasm)")
-		}
-
-		if _, err := exec.LookPath("cargo-generate-rpm"); err != nil {
-			return fmt.Errorf("cargo-generate-rpm not found. Install it with: cargo install cargo-generate-rpm")
-		}
-
-		bestMatch := e.getBestMatch(art, osName, arch, abi)
-
-		if bestMatch == nil {
-			return fmt.Errorf("no matching target found for %s-%s-%s", osName, arch, abi)
-		}
-
-		target := e.resolveTarget(*bestMatch, arch, abi)
-
-		return e.runCargoPackager("generate-rpm", []string{"--target", target})
-	case "msi":
-		if osName != "windows" {
-			return fmt.Errorf("msi packaging is only supported for windows")
-		}
-
-		if _, err := exec.LookPath("candle"); err != nil {
-			return fmt.Errorf("WiX Toolset (candle/light) not found. Please install it to generate MSI packages.")
-		}
-
-		bestMatch := e.getBestMatch(art, osName, arch, abi)
-
-		if bestMatch == nil {
-			return fmt.Errorf("no matching target found for %s-%s-%s", osName, arch, abi)
-		}
-
-		target := e.resolveTarget(*bestMatch, arch, abi)
-
-		return e.runCargoPackager("wix", []string{"--target", target})
+	case "deb", "rpm", "msi":
+		return e.handleSystemPackage(cfg, art, artifactName, osName, arch, abi, format)
 	case "tar.gz", "targz":
-		return e.createTarGz(cfg, art, artifactName, osName, arch, abi, manifest)
+		return e.createTarGz(cfg, art, artifactName, osName, arch, abi, e.loadManifestOrFatal())
 	case "zip":
-		return e.createZip(cfg, art, artifactName, osName, arch, abi, manifest)
+		return e.createZip(cfg, art, artifactName, osName, arch, abi, e.loadManifestOrFatal())
 	default:
 		return fmt.Errorf("unsupported package format: %s", format)
 	}
 }
 
+// handleSystemPackage processes deb, rpm, or msi packages.
+func (e *RustEngine) handleSystemPackage(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi, format string) error {
+	if err := e.validateSystemPackage(osName, abi, arch, format); err != nil {
+		return err
+	}
+
+	bestMatch := e.getBestMatch(art, osName, arch, abi)
+	if bestMatch == nil {
+		return fmt.Errorf("no matching target found for %s-%s-%s", osName, arch, abi)
+	}
+	target := e.resolveTarget(*bestMatch, arch, abi)
+
+	command := e.getPackageCommand(format)
+	return e.runCargoPackager(command, []string{"--target", target})
+}
+
+// validateSystemPackage checks OS, ABI, arch, and tool availability.
+func (e *RustEngine) validateSystemPackage(osName, abi, arch, format string) error {
+	if osName != "linux" || abi == "musl" || arch == "wasm32" {
+		return fmt.Errorf("%s packaging is only supported for linux (non-musl, non-wasm)", format)
+	}
+
+	tool := map[string]string{
+		"deb": "cargo-deb",
+		"rpm": "cargo-generate-rpm",
+		"msi": "candle",
+	}[format]
+
+	if tool == "candle" && osName != "windows" {
+		return fmt.Errorf("msi packaging is only supported for windows")
+	}
+
+	if _, err := exec.LookPath(tool); err != nil {
+		return fmt.Errorf("%s not found. Install it with: cargo install %s", tool, tool)
+	}
+	return nil
+}
+
+// getPackageCommand returns the cargo subcommand for a given format.
+func (e *RustEngine) getPackageCommand(format string) string {
+	switch format {
+	case "deb":
+		return "deb"
+	case "rpm":
+		return "generate-rpm"
+	case "msi":
+		return "wix"
+	default:
+		return ""
+	}
+}
+
+// loadManifestOrFatal loads manifest or returns nil (caller should handle error).
+func (e *RustEngine) loadManifestOrFatal() *cargoManifest {
+	manifest, err := e.loadManifest()
+	if err != nil {
+		return nil
+	}
+	return manifest
+}
+
+// createTarGz creates a .tar.gz package from built artifacts.
 func (e *RustEngine) createTarGz(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi string, manifest *cargoManifest) error {
 	packageName := cfg.Naming.Resolve(cfg.Naming.Package, artifactName, osName, arch, manifest.Package.Version, abi, "tar.gz")
 	outPath := filepath.Join(cfg.OutputDir, packageName)
@@ -100,6 +106,8 @@ func (e *RustEngine) createTarGz(cfg *config.Config, art *config.ArtifactConfig,
 
 	return e.archiveArtifactFiles(tw, nil, cfg, art, artifactName, osName, arch, abi, manifest)
 }
+
+// createTarGz creates a .tar.gz package from built artifacts.
 
 func (e *RustEngine) createZip(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi string, manifest *cargoManifest) error {
 	packageName := cfg.Naming.Resolve(cfg.Naming.Package, artifactName, osName, arch, manifest.Package.Version, abi, "zip")

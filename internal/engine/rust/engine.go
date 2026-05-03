@@ -35,30 +35,7 @@ func (e *RustEngine) Validate(cfg *config.Config) error {
 
 	// Check each configured artifact against Cargo.toml.
 	for name, art := range cfg.Artifacts {
-		found := false
-		if art.Type == "lib" {
-			// Check if lib name or package name (with hyphens replaced) matches.
-			if manifest.Lib != nil && manifest.Lib.Name == name {
-				found = true
-			}
-
-			if !found && strings.ReplaceAll(manifest.Package.Name, "-", "_") == name {
-				found = true
-			}
-		} else {
-			// Check if any binary name matches the artifact name.
-			for _, b := range manifest.Bin {
-				if b.Name == name {
-					found = true
-					break
-				}
-			}
-			if !found && manifest.Package.Name == name {
-				found = true
-			}
-		}
-
-		if !found {
+		if !e.isArtifactDefinedInManifest(name, art.Type, manifest) {
 			return fmt.Errorf("artifact mismatch: '%s' (type %s) defined in refinery.toml not found in Cargo.toml", name, art.Type)
 		}
 
@@ -69,7 +46,6 @@ func (e *RustEngine) Validate(cfg *config.Config) error {
 				if len(abis) == 0 {
 					abis = []string{""}
 				}
-
 				for _, abi := range abis {
 					if err := e.validateTriple(tCfg.OS, arch, abi); err != nil {
 						return fmt.Errorf("invalid target config '%s' in artifact '%s': %w", tID, name, err)
@@ -81,30 +57,72 @@ func (e *RustEngine) Validate(cfg *config.Config) error {
 	return nil
 }
 
+// isArtifactDefinedInManifest checks if an artifact exists in Cargo.toml.
+func (e *RustEngine) isArtifactDefinedInManifest(name, artifactType string, manifest *cargoManifest) bool {
+	if artifactType == "lib" {
+		return e.isLibDefined(name, manifest)
+	}
+	return e.isBinDefined(name, manifest)
+}
+
+// isLibDefined checks if a library artifact is defined in Cargo.toml.
+func (e *RustEngine) isLibDefined(name string, manifest *cargoManifest) bool {
+	if manifest.Lib != nil && manifest.Lib.Name == name {
+		return true
+	}
+	if strings.ReplaceAll(manifest.Package.Name, "-", "_") == name {
+		return true
+	}
+	return false
+}
+
+// isBinDefined checks if a binary artifact is defined in Cargo.toml.
+func (e *RustEngine) isBinDefined(name string, manifest *cargoManifest) bool {
+	for _, b := range manifest.Bin {
+		if b.Name == name {
+			return true
+		}
+	}
+	if manifest.Package.Name == name {
+		return true
+	}
+	return false
+}
+
 // GetCIRequirements returns necessary tools/packages for CI based on config.
 func (e *RustEngine) GetCIRequirements(cfg *config.Config) []string {
 	reqs := []string{"rust"}
 	for _, art := range cfg.Artifacts {
-		for _, tCfg := range art.Targets {
-			if tCfg.OS == "linux" && e.sliceContains(tCfg.Archs, "aarch64") {
-				reqs = append(reqs, "cross-linker:linux-aarch64")
-			}
+		reqs = e.addTargetRequirements(reqs, art)
+		reqs = e.addPackageRequirements(reqs, art)
+	}
+	return reqs
+}
 
-			if e.sliceContains(tCfg.ABIs, "musl") {
-				reqs = append(reqs, "pkg:musl-tools")
-			}
+// addTargetRequirements adds CI requirements based on target configuration.
+func (e *RustEngine) addTargetRequirements(reqs []string, art *config.ArtifactConfig) []string {
+	for _, tCfg := range art.Targets {
+		if tCfg.OS == "linux" && e.sliceContains(tCfg.Archs, "aarch64") {
+			reqs = append(reqs, "cross-linker:linux-aarch64")
 		}
+		if e.sliceContains(tCfg.ABIs, "musl") {
+			reqs = append(reqs, "pkg:musl-tools")
+		}
+	}
+	return reqs
+}
 
-		formats := append([]string{}, art.Packages...)
-		for _, p := range e.uniqueFormats(formats) {
-			switch p {
-			case "deb":
-				reqs = append(reqs, "pkg:cargo-deb")
-			case "rpm":
-				reqs = append(reqs, "pkg:cargo-generate-rpm")
-			case "msi":
-				reqs = append(reqs, "pkg:cargo-wix")
-			}
+// addPackageRequirements adds CI requirements based on package formats.
+func (e *RustEngine) addPackageRequirements(reqs []string, art *config.ArtifactConfig) []string {
+	formats := append([]string{}, art.Packages...)
+	for _, p := range e.uniqueFormats(formats) {
+		switch p {
+		case "deb":
+			reqs = append(reqs, "pkg:cargo-deb")
+		case "rpm":
+			reqs = append(reqs, "pkg:cargo-generate-rpm")
+		case "msi":
+			reqs = append(reqs, "pkg:cargo-wix")
 		}
 	}
 	return reqs
