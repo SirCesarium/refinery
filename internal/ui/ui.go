@@ -31,7 +31,9 @@ func Warn(format string, a ...any) {
 }
 
 func Error(err error, help string) {
-	fmt.Fprintf(os.Stderr, "%s%s✖ Error:%s %v\n", Red, Bold, Reset, err)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s%s✖ Error:%s %v\n", Red, Bold, Reset, err)
+	}
 	if help != "" {
 		fmt.Fprintf(os.Stderr, "%s%s💡 Suggestion:%s %s\n", Cyan, Bold, Reset, help)
 	}

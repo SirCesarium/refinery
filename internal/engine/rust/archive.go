@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/SirCesarium/refinery/internal/config"
+	"github.com/SirCesarium/refinery/internal/ui"
 )
 
 func (e *RustEngine) archiveArtifactFiles(tw *tar.Writer, zw *zip.Writer, cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi string, manifest *cargoManifest) error {
@@ -23,19 +24,22 @@ func (e *RustEngine) archiveArtifactFiles(tw *tar.Writer, zw *zip.Writer, cfg *c
 	}
 
 	for _, bt := range buildTypes {
-		ext, _ := e.getExtAndPrefix(osName, art.Type, bt)
+		ext, _ := e.getExtAndPrefix(osName, abi, art.Type, bt)
 		finalName := cfg.Naming.Resolve(cfg.Naming.Binary, artifactName, osName, arch, manifest.Package.Version, abi, ext)
 		filePath := filepath.Join(cfg.OutputDir, finalName)
 
-		if _, err := os.Stat(filePath); err == nil {
-			if tw != nil {
-				if err := e.addFileToTar(tw, filePath, finalName); err != nil {
-					return err
-				}
-			} else {
-				if err := e.addFileToZip(zw, filePath, finalName); err != nil {
-					return err
-				}
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			ui.Warn("Artifact not found for archiving: %s (build type: %s). Skipping...", filePath, bt)
+			continue
+		}
+
+		if tw != nil {
+			if err := e.addFileToTar(tw, filePath, finalName); err != nil {
+				return err
+			}
+		} else {
+			if err := e.addFileToZip(zw, filePath, finalName); err != nil {
+				return err
 			}
 		}
 	}

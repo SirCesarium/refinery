@@ -7,6 +7,7 @@ import (
 
 	"github.com/SirCesarium/refinery/internal/config"
 	"github.com/SirCesarium/refinery/internal/engine"
+	"github.com/SirCesarium/refinery/internal/ui"
 )
 
 type RustEngine struct{}
@@ -83,9 +84,6 @@ func (e *RustEngine) GetCIRequirements(cfg *config.Config) []string {
 		}
 
 		formats := append([]string{}, art.Packages...)
-		for _, tCfg := range art.Targets {
-			formats = append(formats, tCfg.Packages...)
-		}
 		for _, p := range e.uniqueFormats(formats) {
 			switch p {
 			case "deb":
@@ -119,4 +117,41 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 
 func (e *RustEngine) Package(cfg *config.Config, art *config.ArtifactConfig, opts engine.BuildOptions, format string) error {
 	return e.pkg(cfg, art, opts.ArtifactName, opts.OS, opts.Arch, opts.ABI, format)
+}
+
+func (e *RustEngine) ValidateRustSpecific(cfg *config.Config) error {
+	manifest, err := e.loadManifest()
+	if err != nil {
+		return err
+	}
+
+	for name, art := range cfg.Artifacts {
+		if art.Type == "bin" {
+			found := false
+			for _, b := range manifest.Bin {
+				if b.Name == name {
+					found = true
+					break
+				}
+			}
+			if !found && manifest.Package.Name != name {
+				ui.Warn("Artifact '%s' (bin) not found in Cargo.toml bin section", name)
+			}
+		} else if art.Type == "lib" {
+			if manifest.Lib == nil || (manifest.Lib.Name != name && name != strings.ReplaceAll(manifest.Package.Name, "-", "_")) {
+				ui.Warn("Artifact '%s' (lib) may not match Cargo.toml lib section", name)
+			}
+		}
+
+		for tName, tCfg := range art.Targets {
+			if tCfg.OS == "darwin" {
+				for _, arch := range tCfg.Archs {
+					if arch == "arm64" {
+						return fmt.Errorf("target '%s': use 'aarch64' instead of 'arm64' for Rust Darwin targets", tName)
+					}
+				}
+			}
+		}
+	}
+	return nil
 }

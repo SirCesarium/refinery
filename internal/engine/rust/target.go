@@ -9,6 +9,9 @@ import (
 func (e *RustEngine) resolveTarget(opts config.TargetConfig, arch, abi string) string {
 	switch opts.OS {
 	case "darwin":
+		if arch == "arm64" {
+			arch = "aarch64"
+		}
 		return fmt.Sprintf("%s-apple-darwin", arch)
 	case "windows":
 		if abi == "" {
@@ -49,15 +52,23 @@ func (e *RustEngine) getBestMatch(art *config.ArtifactConfig, osName, arch, abi 
 	return bestMatch
 }
 
-func (e *RustEngine) getExtAndPrefix(osName, artType, format string) (string, string) {
+func (e *RustEngine) getExtAndPrefix(osName, abi, artType, format string) (string, string) {
 	var ext, prefix string
 	if artType == "lib" {
 		prefix = "lib"
 		switch osName {
 		case "windows":
-			prefix = ""
+			if abi == "msvc" || abi == "" {
+				prefix = ""
+			} else {
+				prefix = "lib"
+			}
 			if format == "staticlib" {
-				ext = "lib"
+				if abi == "gnu" {
+					ext = "a"
+				} else {
+					ext = "lib"
+				}
 			} else {
 				ext = "dll"
 			}
@@ -68,8 +79,13 @@ func (e *RustEngine) getExtAndPrefix(osName, artType, format string) (string, st
 				ext = "dylib"
 			}
 		case "wasm", "wasi":
-			prefix = ""
-			ext = "wasm"
+			if format == "staticlib" {
+				prefix = "lib"
+				ext = "a"
+			} else {
+				prefix = ""
+				ext = "wasm"
+			}
 		default:
 			if format == "staticlib" {
 				ext = "a"

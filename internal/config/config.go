@@ -19,12 +19,8 @@ type Config struct {
 }
 
 type Project struct {
-	Name        string `toml:"name" mapstructure:"name"`
-	Lang        string `toml:"lang" mapstructure:"lang"`
-	Description string `toml:"description,omitempty" mapstructure:"description"`
-	Author      string `toml:"author,omitempty" mapstructure:"author"`
-	License     string `toml:"license,omitempty" mapstructure:"license"`
-	Homepage    string `toml:"homepage,omitempty" mapstructure:"homepage"`
+	Name string `toml:"name" mapstructure:"name"`
+	Lang string `toml:"lang" mapstructure:"lang"`
 }
 
 type ArtifactConfig struct {
@@ -42,7 +38,6 @@ type TargetConfig struct {
 	Runner   string         `toml:"runner,omitempty" mapstructure:"runner"`
 	Archs    []string       `toml:"archs" mapstructure:"archs"`
 	ABIs     []string       `toml:"abis,omitempty" mapstructure:"abis"`
-	Packages []string       `toml:"packages" mapstructure:"packages"`
 	LangOpts map[string]any `toml:"lang_opts,omitempty" mapstructure:"lang_opts"`
 }
 
@@ -87,7 +82,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("project name and lang are required")
 	}
 	if c.OutputDir == "" {
-		return fmt.Errorf("output_dir is required")
+		c.OutputDir = "dist"
 	}
 	if c.Naming.Binary == "" || c.Naming.Package == "" {
 		return fmt.Errorf("naming binary and package are required")
@@ -105,6 +100,17 @@ func (c *Config) Validate() error {
 		if len(art.Targets) == 0 {
 			return fmt.Errorf("artifact %s must have at least one target", name)
 		}
+
+		supportedFormats := map[string]bool{
+			"deb": true, "rpm": true, "msi": true,
+			"tar.gz": true, "targz": true, "zip": true,
+		}
+		for _, pkg := range art.Packages {
+			if !supportedFormats[pkg] {
+				return fmt.Errorf("artifact %s has unsupported package format: %s", name, pkg)
+			}
+		}
+
 		for tID, tCfg := range art.Targets {
 			if tCfg.OS == "" {
 				return fmt.Errorf("target %s in artifact %s must have an 'os' field", tID, name)
@@ -223,7 +229,22 @@ func Default(name string) *Config {
 	}
 }
 
+func (c *Config) RemoveRedundantFields() {
+	c.Project = Project{
+		Name: c.Project.Name,
+		Lang: c.Project.Lang,
+	}
+}
+
 func (c *Config) Write(path string) error {
+	if len(c.Artifacts) == 0 {
+		c.Artifacts = nil
+	}
+	for _, art := range c.Artifacts {
+		if len(art.Targets) == 0 {
+			art.Targets = nil
+		}
+	}
 	data, err := toml.Marshal(c)
 
 	if err != nil {

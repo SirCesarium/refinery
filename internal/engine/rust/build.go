@@ -9,6 +9,7 @@ import (
 
 	"github.com/SirCesarium/refinery/internal/config"
 	"github.com/SirCesarium/refinery/internal/engine"
+	"github.com/SirCesarium/refinery/internal/ui"
 )
 
 func (e *RustEngine) build(cfg *config.Config, art *config.ArtifactConfig, opts engine.BuildOptions) error {
@@ -36,11 +37,11 @@ func (e *RustEngine) build(cfg *config.Config, art *config.ArtifactConfig, opts 
 
 	ext := ""
 	if art.Type == "bin" {
-		ext, _ = e.getExtAndPrefix(opts.OS, art.Type, "bin")
+		ext, _ = e.getExtAndPrefix(opts.OS, opts.ABI, art.Type, "bin")
 	} else if len(art.LibraryTypes) > 0 {
-		ext, _ = e.getExtAndPrefix(opts.OS, art.Type, art.LibraryTypes[0])
+		ext, _ = e.getExtAndPrefix(opts.OS, opts.ABI, art.Type, art.LibraryTypes[0])
 	} else {
-		ext, _ = e.getExtAndPrefix(opts.OS, art.Type, "cdylib")
+		ext, _ = e.getExtAndPrefix(opts.OS, opts.ABI, art.Type, "cdylib")
 	}
 	binaryName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, version, opts.ABI, ext)
 	binaryPath := filepath.Join(cfg.OutputDir, binaryName)
@@ -91,7 +92,7 @@ func (e *RustEngine) moveArtifacts(cfg *config.Config, art *config.ArtifactConfi
 	}
 
 	for _, bt := range buildTypes {
-		ext, prefix := e.getExtAndPrefix(osName, art.Type, bt)
+		ext, prefix := e.getExtAndPrefix(osName, abi, art.Type, bt)
 		finalName := cfg.Naming.Resolve(cfg.Naming.Binary, artifactName, osName, arch, version, abi, ext)
 
 		realSrcName := artifactName
@@ -114,6 +115,7 @@ func (e *RustEngine) moveArtifacts(cfg *config.Config, art *config.ArtifactConfi
 		}
 
 		if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+			ui.Warn("Expected artifact not found at %s (build type: %s). Skipping...", srcPath, bt)
 			continue
 		}
 

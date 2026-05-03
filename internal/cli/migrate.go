@@ -1,23 +1,28 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/SirCesarium/refinery/internal/app"
 	"github.com/SirCesarium/refinery/internal/config"
+	"github.com/SirCesarium/refinery/internal/engine/rust"
 	"github.com/SirCesarium/refinery/internal/pipeline"
 	"github.com/SirCesarium/refinery/internal/ui"
 	"github.com/spf13/cobra"
 )
 
+var dryRun bool
+
 var migrateCmd = &cobra.Command{
 	Use:   "migrate [provider]",
-	Short: "Generate CI/CD workflows",
+	Short: "Generate CI/CD workflows with validation",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		ui.Section("Migration")
 		providerName := args[0]
+
 		cfg, err := config.Load("refinery.toml")
 		if err != nil {
 			ui.Fatal(err, "Could not load 'refinery.toml'. Run 'refinery init' first.")
@@ -27,6 +32,19 @@ var migrateCmd = &cobra.Command{
 		eng := engineRegistry.Get(cfg.Project.Lang)
 		if eng == nil {
 			ui.Fatal(nil, "Unsupported language: "+cfg.Project.Lang)
+		}
+
+		if err := eng.Validate(cfg); err != nil {
+			ui.Fatal(err, "Configuration validation failed. Fix refinery.toml before migrating.")
+		}
+
+		if cfg.Project.Lang == "rust" {
+			if rustEngine, ok := eng.(*rust.RustEngine); ok {
+				ui.Info("Running Rust-specific validation...")
+				if err := rustEngine.ValidateRustSpecific(cfg); err != nil {
+					ui.Fatal(err, "Rust validation failed. Check Cargo.toml matches refinery.toml")
+				}
+			}
 		}
 
 		providerRegistry, err := app.NewDefaultProviderRegistry()
@@ -46,6 +64,13 @@ var migrateCmd = &cobra.Command{
 			ui.Fatal(err, "CI workflow generation failed. Check your artifact configuration.")
 		}
 
+		if dryRun {
+			ui.Info("Dry run - generated workflow:")
+			fmt.Println(string(data))
+			ui.Success("Dry run completed. No files were written.")
+			return
+		}
+
 		outputPath := gen.Filename()
 		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
 			ui.Fatal(err, "Failed to create directory structure for: "+outputPath)
@@ -56,9 +81,11 @@ var migrateCmd = &cobra.Command{
 		}
 
 		ui.Success("Workflow generated: %s", outputPath)
+		ui.Info("Review the workflow file before pushing to avoid CI failures.")
 	},
 }
 
 func init() {
+	migrateCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview generated workflow without writing")
 	rootCmd.AddCommand(migrateCmd)
 }

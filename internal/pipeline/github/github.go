@@ -180,9 +180,10 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 		Uses: ActionUploadArtifact,
 		With: map[string]any{
 			"name":              "bin-${{ matrix.artifact }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}",
-			"path":              cfg.OutputDir + "/*",
+			"path":              cfg.OutputDir,
 			"if-no-files-found": "error",
 			"compression-level": 0,
+			"overwrite":         false,
 		},
 	})
 
@@ -203,18 +204,22 @@ func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([
 			If:     "startsWith(github.ref, 'refs/tags/')",
 			Steps: []Step{
 				{
-					Name: "Download",
+					Name: "Download Artifacts",
 					Uses: ActionDownloadArtifact,
 					With: map[string]any{
 						"path":           "./artifacts",
-						"merge-multiple": true,
+						"merge-multiple": false,
 					},
 				},
 				{
-					Name: "Publish",
+					Name: "List Artifacts",
+					Run:  "find ./artifacts -type f | sort",
+				},
+				{
+					Name: "Publish Release",
 					Uses: ActionGHRelease,
 					With: map[string]any{
-						"files":                   "./artifacts/*",
+						"files":                   "./artifacts/**/*",
 						"fail_on_unmatched_files": true,
 					},
 					Env: map[string]string{

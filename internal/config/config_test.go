@@ -1,83 +1,142 @@
 package config
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 )
 
-func TestLoadInvalidConfig(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "invalid.toml")
-
-	content := `
-refinery_version = "2"
-output_dir = "dist"
-[project]
-name = "test"
-lang = "rust"
-[artifacts.invalid]
-type = "invalid"
-source = "src/main.rs"
-[artifacts.invalid.targets.linux]
-archs = ["x86_64"]
-`
-	err := os.WriteFile(configPath, []byte(content), 0644)
-	if err != nil {
-		t.Fatal(err)
+func TestDefault(t *testing.T) {
+	cfg := Default("test-project")
+	if cfg.Project.Name != "test-project" {
+		t.Errorf("Expected project name 'test-project', got '%s'", cfg.Project.Name)
 	}
-
-	_, err = Load(configPath)
-	if err == nil {
-		t.Error("expected error for invalid artifact type")
-	}
-}
-
-func TestDefaultConfig(t *testing.T) {
-	cfg := Default("my-project")
-	if cfg.Project.Name != "my-project" {
-		t.Errorf("expected my-project, got %s", cfg.Project.Name)
+	if cfg.Project.Lang != "rust" {
+		t.Errorf("Expected lang 'rust', got '%s'", cfg.Project.Lang)
 	}
 	if cfg.OutputDir != "dist" {
-		t.Errorf("expected dist, got %s", cfg.OutputDir)
+		t.Errorf("Expected output dir 'dist', got '%s'", cfg.OutputDir)
 	}
 }
 
-func TestConfigWrite(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "test.toml")
-
-	cfg := Default("write-test")
-	err := cfg.Write(configPath)
-	if err != nil {
-		t.Fatalf("failed to write: %v", err)
+func TestValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     *Config
+		wantErr bool
+	}{
+		{
+			name: "valid config",
+			cfg: &Config{
+				RefineryVersion: "latest",
+				Project:         Project{Name: "test", Lang: "rust"},
+				OutputDir:       "dist",
+				Naming: NamingConfig{
+					Binary:  "{artifact}-{os}-{arch}{abi}",
+					Package: "{artifact}-{version}-{os}-{arch}{abi}.{ext}",
+				},
+				Artifacts: map[string]*ArtifactConfig{
+					"test_art": {
+						Type:   "bin",
+						Source: "src/main.rs",
+						Targets: map[string]TargetConfig{
+							"linux": {OS: "linux", Archs: []string{"amd64"}},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing project name",
+			cfg: &Config{
+				RefineryVersion: "latest",
+				Project:         Project{Lang: "rust"},
+				OutputDir:       "dist",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid artifact type",
+			cfg: &Config{
+				RefineryVersion: "latest",
+				Project:         Project{Name: "test", Lang: "rust"},
+				OutputDir:       "dist",
+				Artifacts: map[string]*ArtifactConfig{
+					"test_art": {
+						Type:   "invalid",
+						Source: "src/main.rs",
+						Targets: map[string]TargetConfig{
+							"linux": {OS: "linux", Archs: []string{"amd64"}},
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
 	}
 
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		t.Error("test.toml was not created")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestWriteAndLoad(t *testing.T) {
+	tmpDir := t.TempDir()
+	tomlPath := filepath.Join(tmpDir, "refinery.toml")
+
+	cfg := Default("test-project")
+	cfg.Artifacts["test"] = &ArtifactConfig{
+		Type:   "bin",
+		Source: "src/main.rs",
+		Targets: map[string]TargetConfig{
+			"linux": {OS: "linux", Archs: []string{"amd64"}},
+		},
+	}
+
+	if err := cfg.Write(tomlPath); err != nil {
+		t.Fatalf("Failed to write: %v", err)
+	}
+
+	loaded, err := Load(tomlPath)
+	if err != nil {
+		t.Fatalf("Failed to load: %v", err)
+	}
+
+	if loaded.Project.Name != cfg.Project.Name {
+		t.Errorf("Loaded name mismatch: got %s, want %s", loaded.Project.Name, cfg.Project.Name)
+	}
+}
+
+func TestRemoveRedundantFields(t *testing.T) {
+	cfg := Default("test")
+	cfg.Project = Project{Name: "test", Lang: "rust"}
+	cfg.RemoveRedundantFields()
+
+	if cfg.Project.Name != "test" || cfg.Project.Lang != "rust" {
+		t.Error("RemoveRedundantFields changed essential fields")
 	}
 }
 
 func TestNamingResolution(t *testing.T) {
 	n := NamingConfig{
-		Binary:  "{artifact}-{os}-{arch}-{version}",
-		Package: "{artifact}-{version}.{ext}",
-	}
-	res := n.Resolve(n.Binary, "myart", "linux", "x64", "1.0.0", "gnu", "so")
-	expected := "myart-linux-x64-1.0.0.so"
-	if res != expected {
-		t.Errorf("binary resolve failed: got %s, want %s", res, expected)
+		Binary:  "{artifact}-{os}-{arch}{abi}",
+		Package: "{artifact}-{version}-{os}-{arch}{abi}.{ext}",
 	}
 
-	res = n.Resolve(n.Binary, "myart", "linux", "x64", "1.0.0", "gnu", "")
-	expected = "myart-linux-x64-1.0.0"
-	if res != expected {
-		t.Errorf("binary resolve without ext failed: got %s, want %s", res, expected)
+	binary := n.Resolve(n.Binary, "myapp", "linux", "amd64", "1.0.0", "musl", "exe")
+	expected := "myapp-linux-amd64-musl.exe"
+	if binary != expected {
+		t.Errorf("Binary resolution failed: got %s, want %s", binary, expected)
 	}
 
-	res = n.Resolve(n.Package, "myart", "linux", "x64", "1.0.0", "gnu", "tar.gz")
-	expected = "myart-1.0.0.tar.gz"
-	if res != expected {
-		t.Errorf("package resolve failed: got %s, want %s", res, expected)
+	pkg := n.Resolve(n.Package, "myapp", "linux", "amd64", "1.0.0", "musl", "deb")
+	expectedPkg := "myapp-1.0.0-linux-amd64-musl.deb"
+	if pkg != expectedPkg {
+		t.Errorf("Package resolution failed: got %s, want %s", pkg, expectedPkg)
 	}
 }

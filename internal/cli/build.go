@@ -120,7 +120,7 @@ func findTargetPackages(art *config.ArtifactConfig, osName, arch, abi string) []
 		if abi != "" && len(tCfg.ABIs) > 0 && !contains(tCfg.ABIs, abi) {
 			continue
 		}
-		return tCfg.Packages
+		return art.Packages
 	}
 	return nil
 }
