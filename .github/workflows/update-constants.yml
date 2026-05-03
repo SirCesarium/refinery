@@ -34,6 +34,7 @@ jobs:
             "actions/download-artifact"
             "softprops/action-gh-release"
             "actions-rust-lang/setup-rust-toolchain"
+            "SirCesarium/refinery"
           )
 
           UPDATED=false

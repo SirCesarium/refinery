@@ -10,6 +10,17 @@ license = "MIT"
 binary = "{artifact}-{os}-{arch}{abi}"
 package = "{artifact}-{version}-{os}-{arch}{abi}.{ext}"
 
+[build_refinery]
+enabled = true
+
+[[pre_build]]
+action = "smoke-test"
+with = { refinery_bin = "./refinery-local", filter = "${{ matrix.os }}" }
+
+[[post_build]]
+action = "upload-artifacts"
+with = { name = "bin-${{ matrix.artifact }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.abi && format('-{0}', matrix.abi) }}", path = "dist" }
+
 [artifacts.refinery]
 type = "bin"
 source = "./cmd/refinery"
@@ -17,11 +28,11 @@ packages = ["tar.gz", "zip"]
 
 [artifacts.refinery.targets.linux]
 os = "linux"
-archs = ["amd64", "arm64"]
+archs = ["amd64", "arm64", "386"]
 
 [artifacts.refinery.targets.windows]
 os = "windows"
-archs = ["amd64"]
+archs = ["amd64", "386"]
 
 [artifacts.refinery.targets.darwin]
 os = "darwin"
