@@ -147,7 +147,7 @@ echo "All Rust smoke tests PASSED!"
 
 # Test Go project
 echo "Testing Go project..."
-cd /app
+cd "$(git rev-parse --show-toplevel)"
 cd tests/smoke/go-project
 rm -rf dist
 
