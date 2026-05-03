@@ -1,0 +1,26 @@
+refinery_version = "latest"
+
+[project]
+name = "go-smoke-test"
+lang = "go"
+
+[naming]
+binary = "{artifact}-{os}-{arch}{abi}"
+package = "{artifact}-{version}-{os}-{arch}{abi}.{ext}"
+
+[artifacts.app]
+type = "bin"
+source = "."
+packages = ["tar.gz"]
+
+[artifacts.app.targets.linux]
+os = "linux"
+archs = ["amd64", "arm64"]
+
+[artifacts.app.targets.windows]
+os = "windows"
+archs = ["amd64"]
+
+[artifacts.app.targets.darwin]
+os = "darwin"
+archs = ["amd64", "arm64"]
