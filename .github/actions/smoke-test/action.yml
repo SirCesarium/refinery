@@ -1,0 +1,49 @@
+name: 'Refinery Smoke Test'
+description: 'Runs smoke tests for refinery'
+inputs:
+  refinery_bin:
+    description: 'Path to refinery binary'
+    required: true
+  filter:
+    description: 'OS filter'
+    required: false
+    default: ""
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-unknown-linux-gnu, x86_64-unknown-linux-musl, i686-unknown-linux-gnu, aarch64-unknown-linux-gnu, wasm32-wasip1, x86_64-pc-windows-msvc, i686-pc-windows-msvc, x86_64-pc-windows-gnu, aarch64-apple-darwin
+
+    - name: Setup Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: "stable"
+
+    - name: Rust Cache
+      uses: swatinem/rust-cache@v2
+      with:
+        workspaces: tests/smoke/rust-project -> target
+
+    - name: Install Rust tools (Linux)
+      if: runner.os == 'Linux'
+      uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-deb,cargo-generate-rpm
+
+    - name: Install dependencies (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y qemu-user-static gcc-aarch64-linux-gnu gcc-i686-linux-gnu libc6-dev-i386 musl-tools
+        curl https://wasmtime.dev/install.sh -sSf | bash
+        echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
+
+    - name: Run Smoke Test
+      shell: bash
+      run: |
+        chmod +x scripts/smoke-test.sh
+        [ "${{ runner.os }}" != "Windows" ] && chmod +x ${{ inputs.refinery_bin }}
+        ./scripts/smoke-test.sh ${{ inputs.refinery_bin }} "${{ inputs.filter }}"

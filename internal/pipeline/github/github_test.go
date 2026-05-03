@@ -193,9 +193,6 @@ func TestGetBuildArtifactSteps(t *testing.T) {
 		t.Fatalf("NewProvider returned error: %v", err)
 	}
 
-	mockEng := &mockBuildEngineForGithub{
-		requirements: []string{"rust"},
-	}
 	cfg := &config.Config{
 		Project: config.Project{
 			Name: "test-project",
@@ -214,7 +211,7 @@ func TestGetBuildArtifactSteps(t *testing.T) {
 		},
 	}
 
-	steps := p.getBuildArtifactStep(mockEng, cfg)
+	steps := p.getBuildArtifactStep(cfg)
 	if len(steps) == 0 {
 		t.Error("expected non-empty steps")
 	}

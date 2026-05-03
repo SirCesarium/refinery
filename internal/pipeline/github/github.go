@@ -179,7 +179,7 @@ func (p *GithubProvider) getBuildSteps(eng engine.BuildEngine, cfg *config.Confi
 	}
 
 	steps = p.addPreBuildSteps(steps, cfg)
-	steps = append(steps, p.getBuildArtifactStep(eng, cfg)...)
+	steps = append(steps, p.getBuildArtifactStep(cfg)...)
 	steps = p.addPostBuildSteps(steps, cfg)
 	return steps
 }
@@ -192,7 +192,7 @@ func (p *GithubProvider) addCIRequirementSteps(steps []Step, eng engine.BuildEng
 			steps = append(steps, Step{
 				Name: "Setup Go",
 				Uses: ActionSetupGo,
-				With: map[string]any{"go-version": "1.22", "cache": true},
+				With: map[string]any{"go-version": "1.26.2", "cache": true},
 			})
 		case req == "pkg:go-bin-tools":
 			steps = append(steps, Step{
@@ -242,7 +242,7 @@ func (p *GithubProvider) addCIRequirementSteps(steps []Step, eng engine.BuildEng
 }
 
 // getBuildArtifactStep returns the artifact build step.
-func (p *GithubProvider) getBuildArtifactStep(eng engine.BuildEngine, cfg *config.Config) []Step {
+func (p *GithubProvider) getBuildArtifactStep(cfg *config.Config) []Step {
 	if cfg.BuildRefinery != nil && cfg.BuildRefinery.Enabled {
 		return []Step{
 			{
@@ -284,10 +284,10 @@ func (p *GithubProvider) addPostBuildSteps(steps []Step, cfg *config.Config) []S
 }
 
 func (p *GithubProvider) createGithubStep(step config.BuildStep, prefix string) Step {
-	// Resolve action name to full workflow path if needed
+	// Resolve action name to full action path if needed
 	action := step.Action
 	if action != "" && !strings.Contains(action, "/") && !strings.HasSuffix(action, ".yml") {
-		action = fmt.Sprintf("./.github/workflows/%s.yml", action)
+		action = fmt.Sprintf("./.github/actions/%s", action)
 	}
 
 	// Use action name as ID if not provided
