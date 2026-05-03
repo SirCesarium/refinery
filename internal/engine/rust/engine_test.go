@@ -7,6 +7,7 @@ import (
 	"github.com/SirCesarium/refinery/internal/config"
 )
 
+// TestRustEngineValidate checks validation logic against a Cargo.toml.
 func TestRustEngineValidate(t *testing.T) {
 	tmpDir := t.TempDir()
 	origWd, _ := os.Getwd()

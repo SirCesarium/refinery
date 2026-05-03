@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestDefault verifies the default configuration values.
 func TestDefault(t *testing.T) {
 	cfg := Default("test-project")
 	if cfg.Project.Name != "test-project" {
@@ -18,6 +19,7 @@ func TestDefault(t *testing.T) {
 	}
 }
 
+// TestValidate checks config validation with various cases.
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -85,6 +87,7 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+// TestWriteAndLoad ensures config can be written to TOML and read back.
 func TestWriteAndLoad(t *testing.T) {
 	tmpDir := t.TempDir()
 	tomlPath := filepath.Join(tmpDir, "refinery.toml")
@@ -112,6 +115,7 @@ func TestWriteAndLoad(t *testing.T) {
 	}
 }
 
+// TestRemoveRedundantFields checks that non-essential fields are stripped.
 func TestRemoveRedundantFields(t *testing.T) {
 	cfg := Default("test")
 	cfg.Project = Project{Name: "test", Lang: "rust"}
@@ -122,6 +126,7 @@ func TestRemoveRedundantFields(t *testing.T) {
 	}
 }
 
+// TestNamingResolution validates the template substitution logic.
 func TestNamingResolution(t *testing.T) {
 	n := NamingConfig{
 		Binary:  "{artifact}-{os}-{arch}{abi}",

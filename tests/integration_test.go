@@ -9,6 +9,7 @@ import (
 	"github.com/SirCesarium/refinery/internal/pipeline"
 )
 
+// TestFullWorkflow simulates a complete config load, validation, and CI generation.
 func TestFullWorkflow(t *testing.T) {
 	tmpDir := t.TempDir()
 	origWd, _ := os.Getwd()
@@ -78,6 +79,7 @@ path = "src/main.rs"
 	t.Log("Integration test completed successfully (pre-execution steps)")
 }
 
+// TestEdgeCases checks behavior with missing files and mismatched names.
 func TestEdgeCases(t *testing.T) {
 	_, err := config.Load("non-existent.toml")
 	if err == nil {

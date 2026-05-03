@@ -12,6 +12,7 @@ import (
 	"github.com/SirCesarium/refinery/internal/ui"
 )
 
+// archiveArtifactFiles adds build outputs and headers to a tar or zip archive.
 func (e *RustEngine) archiveArtifactFiles(tw *tar.Writer, zw *zip.Writer, cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi string, manifest *cargoManifest) error {
 	var buildTypes []string
 	if art.Type == "bin" {
@@ -70,6 +71,7 @@ func (e *RustEngine) archiveArtifactFiles(tw *tar.Writer, zw *zip.Writer, cfg *c
 	return nil
 }
 
+// addFileToTar adds a single file to a tar archive.
 func (e *RustEngine) addFileToTar(tw *tar.Writer, path, name string) error {
 	file, err := os.Open(path)
 	if err != nil {
@@ -96,6 +98,7 @@ func (e *RustEngine) addFileToTar(tw *tar.Writer, path, name string) error {
 	return err
 }
 
+// addFileToZip adds a single file to a zip archive.
 func (e *RustEngine) addFileToZip(zw *zip.Writer, path, name string) error {
 	file, err := os.Open(path)
 	if err != nil {

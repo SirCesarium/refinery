@@ -2,10 +2,12 @@ package rust
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/SirCesarium/refinery/internal/config"
 )
 
+// resolveTarget converts OS/arch/ABI to a Rust target triple.
 func (e *RustEngine) resolveTarget(opts config.TargetConfig, arch, abi string) string {
 	switch opts.OS {
 	case "darwin":
@@ -31,6 +33,7 @@ func (e *RustEngine) resolveTarget(opts config.TargetConfig, arch, abi string) s
 	}
 }
 
+// getBestMatch finds the target config matching OS, arch, and ABI.
 func (e *RustEngine) getBestMatch(art *config.ArtifactConfig, osName, arch, abi string) *config.TargetConfig {
 	var bestMatch *config.TargetConfig
 	for _, tCfg := range art.Targets {
@@ -52,6 +55,7 @@ func (e *RustEngine) getBestMatch(art *config.ArtifactConfig, osName, arch, abi 
 	return bestMatch
 }
 
+// getExtAndPrefix returns file extension and prefix based on OS and artifact type.
 func (e *RustEngine) getExtAndPrefix(osName, abi, artType, format string) (string, string) {
 	var ext, prefix string
 	if artType == "lib" {
@@ -105,12 +109,7 @@ func (e *RustEngine) getExtAndPrefix(osName, abi, artType, format string) (strin
 }
 
 func (e *RustEngine) sliceContains(slice []string, val string) bool {
-	for _, item := range slice {
-		if item == val {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, val)
 }
 
 func (e *RustEngine) validateTriple(osName, arch, abi string) error {

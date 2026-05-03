@@ -1,6 +1,8 @@
+// Package cli provides command-line interface commands for Refinery.
 package cli
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/SirCesarium/refinery/internal/app"
@@ -17,27 +19,33 @@ var (
 	abi     string
 )
 
+// buildCmd handles building and packaging artifacts.
 var buildCmd = &cobra.Command{
 	Use:   "build",
 	Short: "Build and package an artifact based on configuration",
 	Run: func(cmd *cobra.Command, args []string) {
 		ui.Section("Initialization")
+
+		// Load configuration.
 		cfg, err := config.Load("refinery.toml")
 		if err != nil {
 			ui.Fatal(err, "Ensure 'refinery.toml' exists and is valid. Run 'refinery init' if you haven't yet.")
 		}
 
+		// Retrieve specified artifact configuration.
 		art, ok := cfg.Artifacts[artName]
 		if !ok {
 			ui.Fatal(nil, "Artifact '"+artName+"' not found in config. Check your refinery.toml.")
 		}
 
+		// Get engine for the project language.
 		registry := app.NewDefaultEngineRegistry()
 		eng := registry.Get(cfg.Project.Lang)
 		if eng == nil {
 			ui.Fatal(nil, "No engine found for language: "+cfg.Project.Lang)
 		}
 
+		// Set build options.
 		opts := engine.BuildOptions{
 			ArtifactName: artName,
 			OS:           osName,
@@ -47,11 +55,14 @@ var buildCmd = &cobra.Command{
 
 		ui.Section("Building")
 		ui.Info("Target: %s-%s-%s", osName, arch, abi)
+
+		// Execute build.
 		if err := eng.Build(cfg, art, opts); err != nil {
 			ui.Fatal(err, "The build command failed. Check the logs above for specific toolchain errors (e.g., cargo, gcc).")
 		}
 		ui.Success("Build completed successfully")
 
+		// Determine and execute packaging.
 		packageFormats := mergePackages(art.Packages, findTargetPackages(art, osName, arch, abi))
 		if len(packageFormats) > 0 {
 			ui.Section("Packaging")
@@ -82,6 +93,7 @@ func init() {
 	rootCmd.AddCommand(buildCmd)
 }
 
+// mergePackages combines global and target packages, removing duplicates.
 func mergePackages(global, target []string) []string {
 	merged := make([]string, 0, len(global)+len(target))
 	seen := map[string]bool{}
@@ -102,6 +114,7 @@ func mergePackages(global, target []string) []string {
 	return merged
 }
 
+// findTargetPackages returns packages for a specific OS/arch/abi target.
 func findTargetPackages(art *config.ArtifactConfig, osName, arch, abi string) []string {
 	keys := make([]string, 0, len(art.Targets))
 	for k := range art.Targets {
@@ -125,11 +138,7 @@ func findTargetPackages(art *config.ArtifactConfig, osName, arch, abi string) []
 	return nil
 }
 
+// contains checks if a string is present in a slice.
 func contains(slice []string, val string) bool {
-	for _, item := range slice {
-		if item == val {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, val)
 }

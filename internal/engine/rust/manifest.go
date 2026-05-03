@@ -24,6 +24,7 @@ type cargoManifest struct {
 	} `toml:"bin"`
 }
 
+// loadManifest reads and parses the Cargo.toml file into a struct.
 func (e *RustEngine) loadManifest() (*cargoManifest, error) {
 	cargoBytes, err := os.ReadFile("Cargo.toml")
 	if err != nil {

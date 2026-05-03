@@ -1,3 +1,4 @@
+// Package pipeline generates CI/CD workflows using a provider and engine.
 package pipeline
 
 import (

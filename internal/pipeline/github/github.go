@@ -1,3 +1,4 @@
+// Package github implements the CIProvider interface for GitHub Actions workflows.
 package github
 
 import (
@@ -10,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Workflow represents a GitHub Actions workflow YAML structure.
 type Workflow struct {
 	Name        string            `yaml:"name"`
 	On          On                `yaml:"on"`
@@ -26,6 +28,7 @@ type Event struct {
 	Tags []string `yaml:"tags,omitempty"`
 }
 
+// Job defines a single job in the workflow.
 type Job struct {
 	Name     string    `yaml:"name,omitempty"`
 	RunsOn   string    `yaml:"runs-on"`
@@ -40,6 +43,7 @@ type Strategy struct {
 	Matrix   map[string]any `yaml:"matrix,omitempty"`
 }
 
+// Step represents a single step within a job.
 type Step struct {
 	Name  string            `yaml:"name,omitempty"`
 	If    string            `yaml:"if,omitempty"`
@@ -54,6 +58,7 @@ type GithubProvider struct {
 	filename string
 }
 
+// NewProvider creates a new GitHub Actions workflow provider.
 func NewProvider(filename string) (*GithubProvider, error) {
 	if filename == "" {
 		return nil, fmt.Errorf("workflow filename cannot be empty")
@@ -69,6 +74,7 @@ func (p *GithubProvider) Filename() string {
 	return filepath.Join(".github", "workflows", fmt.Sprintf("%s.yml", p.filename))
 }
 
+// Generate creates a GitHub Actions workflow YAML for the given config and engine.
 func (p *GithubProvider) Generate(cfg *config.Config, eng engine.BuildEngine) ([]byte, error) {
 	if err := eng.Validate(cfg); err != nil {
 		return nil, err

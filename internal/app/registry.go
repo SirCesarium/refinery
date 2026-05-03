@@ -1,3 +1,4 @@
+// Package app initializes and provides default registries for engines and CI providers.
 package app
 
 import (
@@ -7,12 +8,14 @@ import (
 	"github.com/SirCesarium/refinery/internal/pipeline/github"
 )
 
+// NewDefaultEngineRegistry creates a registry with the Rust engine registered.
 func NewDefaultEngineRegistry() *engine.EngineRegistry {
 	r := engine.NewRegistry()
 	r.Register(&rust.RustEngine{})
 	return r
 }
 
+// NewDefaultProviderRegistry creates a registry with GitHub Actions provider.
 func NewDefaultProviderRegistry() (*pipeline.ProviderRegistry, error) {
 	r := pipeline.NewRegistry()
 

@@ -12,6 +12,7 @@ import (
 	"github.com/SirCesarium/refinery/internal/ui"
 )
 
+// build orchestrates the full build process: setup, compile, and move artifacts.
 func (e *RustEngine) build(cfg *config.Config, art *config.ArtifactConfig, opts engine.BuildOptions) error {
 	bestMatch := e.getBestMatch(art, opts.OS, opts.Arch, opts.ABI)
 	if bestMatch == nil {
@@ -74,6 +75,8 @@ func (e *RustEngine) build(cfg *config.Config, art *config.ArtifactConfig, opts 
 	return nil
 }
 
+// moveArtifacts copies built files from cargo target dir to the output directory.
+// It also handles header files if configured.
 func (e *RustEngine) moveArtifacts(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi, target, version, profile string, manifest *cargoManifest) error {
 	var buildTypes []string
 	if art.Type == "bin" {
@@ -130,11 +133,14 @@ func (e *RustEngine) moveArtifacts(cfg *config.Config, art *config.ArtifactConfi
 		if err != nil {
 			return fmt.Errorf("failed to search for .h headers: %w", err)
 		}
+
 		headers2, err := filepath.Glob("*.hpp")
 		if err != nil {
 			return fmt.Errorf("failed to search for .hpp headers: %w", err)
 		}
+
 		headers = append(headers, headers2...)
+
 		for _, h := range headers {
 			dest := filepath.Join(cfg.OutputDir, h)
 			if err := copyFile(h, dest); err != nil {
@@ -153,9 +159,11 @@ func moveFile(src, dst string) error {
 	if err := os.Rename(src, dst); err == nil {
 		return nil
 	}
+
 	if err := copyFile(src, dst); err != nil {
 		return err
 	}
+
 	return os.Remove(src)
 }
 
@@ -164,6 +172,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
+
 	defer in.Close()
 
 	stat, err := in.Stat()
@@ -175,6 +184,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
+
 	defer out.Close()
 
 	_, err = io.Copy(out, in)

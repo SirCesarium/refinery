@@ -6,6 +6,7 @@ import (
 	"github.com/SirCesarium/refinery/internal/config"
 )
 
+// TestResolveTarget validates OS/arch/ABI to Rust triple conversion.
 func TestResolveTarget(t *testing.T) {
 	e := &RustEngine{}
 	tests := []struct {
@@ -30,6 +31,7 @@ func TestResolveTarget(t *testing.T) {
 	}
 }
 
+// TestGetBestMatch checks target matching logic for artifacts.
 func TestGetBestMatch(t *testing.T) {
 	e := &RustEngine{}
 	art := &config.ArtifactConfig{
@@ -61,6 +63,7 @@ func TestGetBestMatch(t *testing.T) {
 	}
 }
 
+// TestValidateTriple ensures invalid target triples are rejected.
 func TestValidateTriple(t *testing.T) {
 	e := &RustEngine{}
 	tests := []struct {

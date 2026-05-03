@@ -22,6 +22,7 @@ func (e *RustEngine) runHook(hook string) error {
 	return cmd.Run()
 }
 
+// addTarget installs a Rust target if not present, using a file lock to avoid races.
 func (e *RustEngine) addTarget(target string) error {
 	out, err := exec.Command("rustup", "target", "list", "--installed").Output()
 	if err == nil {
@@ -34,7 +35,7 @@ func (e *RustEngine) addTarget(target string) error {
 	}
 
 	lockPath := filepath.Join(os.TempDir(), "refinery-rustup.lock")
-	for attempt := 0; attempt < 30; attempt++ {
+	for range 30 {
 		lockFile, openErr := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0644)
 		if openErr != nil {
 			time.Sleep(1 * time.Second)
@@ -72,6 +73,7 @@ func (e *RustEngine) isTargetInstalled(target string) bool {
 	return false
 }
 
+// runCargoBuild executes 'cargo build' with target and feature flags.
 func (e *RustEngine) runCargoBuild(art *config.ArtifactConfig, artifactName, osName, arch, abi, target, profile string) error {
 	args := []string{"build", "--target", target}
 	if profile == "release" {
@@ -133,6 +135,7 @@ func (e *RustEngine) runCargoPackager(command string, args []string) error {
 	return cmd.Run()
 }
 
+// setupEnvironment configures linker and SDK variables for cross-compilation.
 func (e *RustEngine) setupEnvironment(art *config.ArtifactConfig, osName, arch, abi, target string) error {
 	bestMatch := e.getBestMatch(art, osName, arch, abi)
 

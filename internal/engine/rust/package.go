@@ -12,6 +12,7 @@ import (
 	"github.com/SirCesarium/refinery/internal/config"
 )
 
+// pkg dispatches packaging to the correct format handler (deb, rpm, msi, etc.).
 func (e *RustEngine) pkg(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi, format string) error {
 	manifest, err := e.loadManifest()
 	if err != nil {
@@ -23,40 +24,54 @@ func (e *RustEngine) pkg(cfg *config.Config, art *config.ArtifactConfig, artifac
 		if osName != "linux" || abi == "musl" || arch == "wasm32" {
 			return fmt.Errorf("deb packaging is only supported for linux (non-musl, non-wasm)")
 		}
+
 		if _, err := exec.LookPath("cargo-deb"); err != nil {
 			return fmt.Errorf("cargo-deb not found. Install it with: cargo install cargo-deb")
 		}
+
 		bestMatch := e.getBestMatch(art, osName, arch, abi)
 		if bestMatch == nil {
 			return fmt.Errorf("no matching target found for %s-%s-%s", osName, arch, abi)
 		}
+
 		target := e.resolveTarget(*bestMatch, arch, abi)
+
 		return e.runCargoPackager("deb", []string{"--target", target})
 	case "rpm":
 		if osName != "linux" || abi == "musl" || arch == "wasm32" {
 			return fmt.Errorf("rpm packaging is only supported for linux (non-musl, non-wasm)")
 		}
+
 		if _, err := exec.LookPath("cargo-generate-rpm"); err != nil {
 			return fmt.Errorf("cargo-generate-rpm not found. Install it with: cargo install cargo-generate-rpm")
 		}
+
 		bestMatch := e.getBestMatch(art, osName, arch, abi)
+
 		if bestMatch == nil {
 			return fmt.Errorf("no matching target found for %s-%s-%s", osName, arch, abi)
 		}
+
 		target := e.resolveTarget(*bestMatch, arch, abi)
+
 		return e.runCargoPackager("generate-rpm", []string{"--target", target})
 	case "msi":
 		if osName != "windows" {
 			return fmt.Errorf("msi packaging is only supported for windows")
 		}
+
 		if _, err := exec.LookPath("candle"); err != nil {
 			return fmt.Errorf("WiX Toolset (candle/light) not found. Please install it to generate MSI packages.")
 		}
+
 		bestMatch := e.getBestMatch(art, osName, arch, abi)
+
 		if bestMatch == nil {
 			return fmt.Errorf("no matching target found for %s-%s-%s", osName, arch, abi)
 		}
+
 		target := e.resolveTarget(*bestMatch, arch, abi)
+
 		return e.runCargoPackager("wix", []string{"--target", target})
 	case "tar.gz", "targz":
 		return e.createTarGz(cfg, art, artifactName, osName, arch, abi, manifest)
@@ -79,6 +94,7 @@ func (e *RustEngine) createTarGz(cfg *config.Config, art *config.ArtifactConfig,
 
 	gw := gzip.NewWriter(f)
 	defer gw.Close()
+
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
 

@@ -1,3 +1,4 @@
+// Package config handles loading and validation of Refinery's TOML configuration.
 package config
 
 import (
@@ -74,29 +75,37 @@ type NamingConfig struct {
 	Package string `toml:"package,omitempty" mapstructure:"package"`
 }
 
+// Validate checks required fields and supported formats in the configuration.
 func (c *Config) Validate() error {
 	if c.RefineryVersion == "" {
 		return fmt.Errorf("refinery_version is required")
 	}
+
 	if c.Project.Name == "" || c.Project.Lang == "" {
 		return fmt.Errorf("project name and lang are required")
 	}
+
 	if c.OutputDir == "" {
 		c.OutputDir = "dist"
 	}
+
 	if c.Naming.Binary == "" || c.Naming.Package == "" {
 		return fmt.Errorf("naming binary and package are required")
 	}
+
 	if len(c.Artifacts) == 0 {
 		return fmt.Errorf("at least one artifact must be defined")
 	}
+
 	for name, art := range c.Artifacts {
 		if art.Type != "bin" && art.Type != "lib" {
 			return fmt.Errorf("artifact %s type must be 'bin' or 'lib'", name)
 		}
+
 		if art.Source == "" {
 			return fmt.Errorf("artifact %s source is required", name)
 		}
+
 		if len(art.Targets) == 0 {
 			return fmt.Errorf("artifact %s must have at least one target", name)
 		}
@@ -105,6 +114,7 @@ func (c *Config) Validate() error {
 			"deb": true, "rpm": true, "msi": true,
 			"tar.gz": true, "targz": true, "zip": true,
 		}
+
 		for _, pkg := range art.Packages {
 			if !supportedFormats[pkg] {
 				return fmt.Errorf("artifact %s has unsupported package format: %s", name, pkg)
@@ -240,11 +250,13 @@ func (c *Config) Write(path string) error {
 	if len(c.Artifacts) == 0 {
 		c.Artifacts = nil
 	}
+
 	for _, art := range c.Artifacts {
 		if len(art.Targets) == 0 {
 			art.Targets = nil
 		}
 	}
+
 	data, err := toml.Marshal(c)
 
 	if err != nil {

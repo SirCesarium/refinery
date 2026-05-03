@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestLoadManifest verifies parsing of valid/invalid Cargo.toml files.
 func TestLoadManifest(t *testing.T) {
 	e := &RustEngine{}
 

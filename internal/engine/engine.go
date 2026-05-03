@@ -1,9 +1,11 @@
+// Package engine defines the core interfaces and registry for build engines.
 package engine
 
 import (
 	"github.com/SirCesarium/refinery/internal/config"
 )
 
+// BuildOptions defines the target for a build operation.
 type BuildOptions struct {
 	ArtifactName string
 	OS           string
@@ -11,6 +13,7 @@ type BuildOptions struct {
 	ABI          string
 }
 
+// BuildEngine defines the interface for language-specific build engines.
 type BuildEngine interface {
 	ID() string
 	Prepare(cfg *config.Config) error

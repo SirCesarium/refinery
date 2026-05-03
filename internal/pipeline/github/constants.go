@@ -1,3 +1,4 @@
+// Package github defines constants for GitHub Actions used in workflow generation.
 package github
 
 const (
