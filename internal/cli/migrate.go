@@ -76,11 +76,14 @@ var migrateCmd = &cobra.Command{
 			ui.Fatal(err, "Failed to create directory structure for: "+outputPath)
 		}
 
-		if err := os.WriteFile(outputPath, data, 0644); err != nil {
-			ui.Fatal(err, "Failed to write workflow file: "+outputPath)
+		if existing, err := os.ReadFile(outputPath); err == nil && string(existing) == string(data) {
+			ui.Info("Workflow unchanged, skipping write.")
+		} else {
+			if err := os.WriteFile(outputPath, data, 0644); err != nil {
+				ui.Fatal(err, "Failed to write workflow file: "+outputPath)
+			}
+			ui.Success("Workflow generated: %s", outputPath)
 		}
-
-		ui.Success("Workflow generated: %s", outputPath)
 		ui.Info("Review the workflow file before pushing to avoid CI failures.")
 	},
 }
