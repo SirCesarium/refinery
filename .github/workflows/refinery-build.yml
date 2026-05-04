@@ -58,7 +58,7 @@ jobs:
             - name: Build Refinery from Source
               run: go build -o ./refinery-local ./cmd/refinery
             - name: Build Artifact using Local Refinery
-              run: ./refinery-local build --artifact ${{ matrix.artifact }} --os ${{ matrix.os }} --arch ${{ matrix.arch }}${{ matrix.abi != '' && format(' --abi {0}', matrix.abi) || '' }}
+              run: ./refinery-local build --artifact ${{ matrix.artifact }} --os ${{ matrix.os }} --arch ${{ matrix.arch }}${{ matrix.abi != '' && format(' --abi {0}', matrix.abi) || '' }} --version ${{ github.ref_name }}
             - name: 'Post-Build: upload-artifacts'
               uses: ./.github/actions/upload-artifacts
               with:
