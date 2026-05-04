@@ -14,7 +14,7 @@
 ## Features
 
 - **Strategy-Based Architecture**
-  - Modular engines for languages (Rust, etc.) and CI providers (GitHub Actions).
+  - Modular engines for languages (Rust, Go) and CI providers (GitHub Actions).
   - Registry-based system for extending supported ecosystems.
 
 - **Multi-Format Packaging**
@@ -23,7 +23,7 @@
 
 - **Fail-Fast Validation**
   - TOML schema verification for `refinery.toml`.
-  - Manifest cross-validation (e.g., against `Cargo.toml`) before execution.
+  - Manifest cross-validation (e.g., against `Cargo.toml` or `go.mod`) before execution.
 
 - **Cross-Compilation Management**
   - Automatic linker selection for Linux ARM and x86 targets.
@@ -85,11 +85,12 @@ Download the binary for your system from the [Releases](https://github.com/SirCe
 
 ## Command Reference
 
-| Command   | Description          | Details                                             |
-| :-------- | :------------------- | :-------------------------------------------------- |
-| `init`    | Initialize project   | Creates a template `refinery.toml`.                 |
-| `build`   | Compile & Package    | Executes building and packaging for a target.       |
-| `migrate` | Generate CI workflow | Validates and generates CI pipelines (GitHub, etc). |
+| Command            | Description           | Details                                                  |
+| :----------------- | :-------------------- | :------------------------------------------------------- |
+| `init`             | Initialize project    | Creates a template `refinery.toml`.                      |
+| `build`            | Compile & Package     | Executes building and packaging for a target.            |
+| `migrate`          | Generate CI workflow  | Validates and generates CI pipelines (GitHub, etc).      |
+| `supported-archs` | List support          | Prints supported architectures for an OS via the engine. |
 
 **`init`:** Creates a `refinery.toml` configuration file for the project.
 
@@ -101,6 +102,7 @@ Download the binary for your system from the [Releases](https://github.com/SirCe
 - `--os`: Target operating system.
 - `--arch`: Target architecture.
 - `--abi`: Target ABI (optional).
+- `--version`: Explicit version for the build (defaults to manifest version).
 
 ## Usage Examples
 
@@ -114,51 +116,61 @@ refinery init my-project
 
 ```bash
 refinery migrate github
+# Or: refinery migrate github --dry-run
 ```
 
 ### 3. Local Build
 
 ```bash
 # Example: Build a specific binary for Linux ARM64
-refinery build --artifact my-app --os linux --arch aarch64 --abi musl
+refinery build --artifact my-app --os linux --arch aarch64 --abi musl --version 1.2.0
 ```
+## Configuration Examples (`refinery.toml`)
 
-## Configuration (`refinery.toml`)
-
+### Rust Project
 ```toml
 refinery_version = "latest"
-output_dir = "dist"
 
 [project]
-name = "my-project"
+name = "my-rust-app"
 lang = "rust"
-author = "Name"
-license = "MIT"
 
-[artifacts.my_app] # This name MUST match the binary name in your Cargo.toml
+[artifacts.cli]
 type = "bin"
 source = "src/main.rs"
-packages = ["deb", "tar.gz"]
+packages = ["tar.gz", "deb"]
 
-[artifacts.my_app.targets.linux_arm]
+[artifacts.cli.targets.linux]
 os = "linux"
-archs = ["aarch64"]
+archs = ["x86_64", "aarch64"]
 abis = ["gnu", "musl"]
+```
 
-[artifacts.my_app_lib] # This name MUST match the library name in your Cargo.toml
-type = "lib"
-library_types = ["cdylib", "staticlib"]
-packages = ["zip"]
+### Go Project
+```toml
+refinery_version = "latest"
 
-[artifacts.my_app_lib.targets.windows]
-os = "windows"
-archs = ["x86_64"]
-abis = ["msvc"]
+[project]
+name = "my-go-app"
+lang = "go"
 
+[artifacts.server]
+type = "bin"
+source = "."
+packages = ["tar.gz"]
+
+[artifacts.server.targets.linux]
+os = "linux"
+archs = ["amd64", "arm64"]
+```
+
+## Naming Templates
+```toml
 [naming]
 binary = "{artifact}-{os}-{arch}{abi}"
 package = "{artifact}-{version}-{os}-{arch}{abi}.{ext}"
 ```
+
 
 ## Technical Details
 

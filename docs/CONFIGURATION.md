@@ -11,11 +11,29 @@ The `refinery.toml` file is the central authority for Refinery's orchestration. 
 Metadata describing the overall project.
 
 - **`name`** (string, required): Technical name of the project.
-- **`lang`** (string, required): Programming language (e.g., `"rust"`).
+- **`lang`** (string, required): Programming language (`"rust"` or `"go"`).
 - **`description`** (string): Short project description for package metadata.
 - **`author`** (string): Project maintainer or author.
 - **`license`** (string): SPDX license identifier (e.g., `"MIT"`, `"Apache-2.0"`).
 - **`homepage`** (string): URL to the project website or repository.
+
+## Global Build Steps
+
+Refinery supports global build steps that can be executed as part of the CI/CD pipeline. These are defined using the `[[pre_build]]` and `[[post_build]]` arrays.
+
+- **`id`** (string): Unique identifier for the step.
+- **`action`** (string): Name of the action to run (e.g., `"smoke-test"`). Maps to `./.github/actions/<action>` or a full GitHub Action path.
+- **`command`** (list of strings): Shell commands to execute if no action is specified.
+- **`os`** (list of strings): Filter to run step only on specific operating systems (e.g., `["linux", "windows"]`).
+- **`with`** (map): Input parameters for the action.
+- **`once`** (boolean): If `true`, the step runs only once in the global setup/teardown phase (e.g., for global environment setup or final publishing) instead of for every matrix target.
+
+## [build_refinery]
+
+Configuration for projects that need to build the Refinery binary itself from source during CI (primarily used for Refinery development).
+
+- **`enabled`** (boolean): Enables building Refinery from source.
+- **`source`** (string): Path to Refinery source code (e.g., `"./cmd/refinery"`).
 
 ## [artifacts.<name>]
 Defines a specific build unit. The `<name>` key must match the component name defined in your language manifest (e.g., the `name` field in `Cargo.toml` for `[[bin]]` or `[lib]`). Refinery uses this name to locate the compiled files.
@@ -47,6 +65,10 @@ Platform-specific build configurations.
 - **`linker`**: Manual override for the linker executable.
 - **`deployment_target`**: (macOS) Minimum OS version (default `"11.0"`).
 
+### Go Engine
+- **`tags`**: List or comma-separated string of Go build tags (e.g., `["netgo", "osusergo"]`).
+- **`ldflags`**: String of linker flags (e.g., `"-s -w"`).
+
 ## [naming]
 Templates for output filenames. If not specified, the system applies standard defaults.
 
@@ -68,5 +90,76 @@ Refinery performs strict validation before any execution:
 3. **Target Integrity**: Each target must define at least one architecture in `archs`.
 4. **Type Consistency**: `library_types` is only validated and used when `type = "lib"`.
 
-## [metadata]
-A key-value map of arbitrary strings. This data is not used by the core engine but is available for hooks or external post-processing tools.
+## Complete Example: Build Everything
+
+This example demonstrates a comprehensive configuration using multiple engines, global hooks, and platform-specific options.
+
+```toml
+refinery_version = "latest"
+output_dir = "dist"
+
+[project]
+name = "refinery-orchestrator"
+lang = "rust" # Root project is Rust
+author = "Refinery Team"
+license = "MIT"
+
+# Build refinery itself to use it for later steps
+[build_refinery]
+enabled = true
+source = "./cmd/refinery"
+
+# Global CI steps
+[[pre_build]]
+id = "lint"
+command = ["cargo clippy -- -D warnings"]
+os = ["linux"]
+once = true
+
+[[pre_build]]
+action = "smoke-test"
+with = { refinery_bin = "./refinery-local" }
+once = true
+
+# Define a CLI binary for all major platforms
+[artifacts.refinery-cli]
+type = "bin"
+source = "src/main.rs"
+packages = ["tar.gz", "zip", "deb", "rpm", "msi"]
+
+[artifacts.refinery-cli.targets.linux]
+os = "linux"
+archs = ["x86_64", "aarch64", "i686"]
+abis = ["gnu", "musl"]
+lang_opts = { profile = "release", features = ["full"] }
+
+[artifacts.refinery-cli.targets.windows]
+os = "windows"
+archs = ["x86_64", "i686"]
+abis = ["msvc", "gnu"]
+
+[artifacts.refinery-cli.targets.darwin]
+os = "darwin"
+archs = ["x86_64", "aarch64"]
+
+[artifacts.refinery-cli.targets.web]
+os = "wasi"
+archs = ["wasm32"]
+
+# Define a cross-platform library
+[artifacts.refinery-core]
+type = "lib"
+library_types = ["cdylib", "staticlib"]
+packages = ["zip"]
+headers = true
+
+[artifacts.refinery-core.targets.desktop]
+os = "linux"
+archs = ["x86_64"]
+abis = ["gnu"]
+
+# Custom naming templates
+[naming]
+binary = "{artifact}-{os}-{arch}{abi}"
+package = "{artifact}-{version}-{os}-{arch}{abi}.{ext}"
+```

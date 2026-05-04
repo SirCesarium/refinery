@@ -19,7 +19,6 @@ type Config struct {
 	BuildRefinery   *BuildRefineryConfig       `toml:"build_refinery,omitempty" mapstructure:"build_refinery"`
 	Artifacts       map[string]*ArtifactConfig `toml:"artifacts" mapstructure:"artifacts"`
 	Naming          NamingConfig               `toml:"naming,omitempty" mapstructure:"naming"`
-	Metadata        map[string]string          `toml:"metadata,omitempty" mapstructure:"metadata"`
 }
 
 // BuildRefineryConfig defines how to build refinery itself.

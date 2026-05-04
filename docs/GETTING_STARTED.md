@@ -26,34 +26,49 @@ This creates a `refinery.toml` file with a baseline configuration.
 
 ## 2. Configuring Artifacts
 
-Edit `refinery.toml` to define your project structure. For a standard Rust project with a binary and a library:
+Edit `refinery.toml` to define your project structure. Refinery automatically detects your project language during `init`, but you can always change it.
+
+### For a Rust Project
+Typical for a CLI or system library:
 
 ```toml
 refinery_version = "latest"
 output_dir = "dist"
 
 [project]
-name = "my-app"
+name = "my-rust-app"
 lang = "rust"
 
 [artifacts.cli]
 type = "bin"
 source = "src/main.rs"
-packages = ["tar.gz"]
+packages = ["tar.gz", "deb"]
 
 [artifacts.cli.targets.linux]
 os = "linux"
 archs = ["x86_64", "aarch64"]
+abis = ["gnu", "musl"]
+```
 
-[artifacts.core]
-type = "lib"
-library_types = ["cdylib", "staticlib"]
-packages = ["zip"]
+### For a Go Project
+Typical for a web server or backend tool:
 
-[artifacts.core.targets.windows]
-os = "windows"
-archs = ["x86_64"]
-abis = ["msvc"]
+```toml
+refinery_version = "latest"
+output_dir = "dist"
+
+[project]
+name = "my-go-app"
+lang = "go"
+
+[artifacts.server]
+type = "bin"
+source = "."
+packages = ["tar.gz"]
+
+[artifacts.server.targets.linux]
+os = "linux"
+archs = ["amd64", "arm64"]
 ```
 
 ## 3. Local Build and Packaging
@@ -61,20 +76,24 @@ abis = ["msvc"]
 To build a specific artifact for a target architecture locally:
 
 ```bash
-refinery build --artifact cli --os linux --arch x86_64
+# For the Rust example:
+refinery build --artifact cli --os linux --arch x86_64 --abi gnu
+
+# For the Go example:
+refinery build --artifact server --os linux --arch amd64
 ```
 
 Refinery will:
-1. Validate the configuration against your `Cargo.toml`.
-2. Orchestrate the compiler using the correct target triple.
-3. Package the resulting binary into a `.tar.gz` in the `dist/` directory.
+1. Validate the configuration against your manifest (`Cargo.toml` or `go.mod`).
+2. Orchestrate the compiler using the correct target environment.
+3. Package the resulting binary into the specified format (e.g., `.tar.gz`) in the `dist/` directory.
 
 ## 4. Automating CI/CD
 
 Generate a GitHub Actions workflow to automate multi-platform builds:
 
 ```bash
-refinery migrate github
+refinery migrate github --dry-run
 ```
 
-This command outputs `.github/workflows/refinery-build.yml`, pre-configured with a build matrix and automatic binary delivery.
+This command outputs a preview of `.github/workflows/refinery-build.yml`. Remove `--dry-run` to write the file. The workflow is pre-configured with a build matrix and automatic binary delivery.
