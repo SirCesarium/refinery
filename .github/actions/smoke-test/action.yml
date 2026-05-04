@@ -23,9 +23,10 @@ runs:
 
     - name: Install Rust tools (Linux)
       if: runner.os == 'Linux'
-      uses: taiki-e/install-action@v2
-      with:
-        tool: cargo-deb,cargo-generate-rpm
+      shell: bash
+      run: |
+        curl -L https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-musl.tgz | tar -xvzf - -C ~/.cargo/bin
+        cargo binstall --no-confirm cargo-deb cargo-generate-rpm
 
     - name: Install dependencies (Linux)
       if: runner.os == 'Linux'
