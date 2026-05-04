@@ -112,8 +112,9 @@ func (p *GithubProvider) getSplitSteps(eng engine.BuildEngine, cfg *config.Confi
 
 	if buildRefinery {
 		setup = append(setup, Step{
-			Name: "Build Refinery from Source",
-			Run:  "go build -o ./refinery-local ./cmd/refinery",
+			Name:  "Build Refinery from Source",
+			Run:   "go build -o ./refinery-local ./cmd/refinery",
+			Shell: "bash",
 		})
 	}
 
@@ -129,8 +130,9 @@ func (p *GithubProvider) getSplitSteps(eng engine.BuildEngine, cfg *config.Confi
 
 	if buildRefinery {
 		build = append(build, Step{
-			Name: "Build Refinery from Source",
-			Run:  "go build -o ./refinery-local ./cmd/refinery",
+			Name:  "Build Refinery from Source",
+			Run:   "go build -o ./refinery-local ./cmd/refinery",
+			Shell: "bash",
 		})
 	}
 
@@ -246,9 +248,10 @@ func (p *GithubProvider) addCIRequirementSteps(steps []Step, eng engine.BuildEng
 			})
 		case "pkg:go-bin-tools":
 			steps = append(steps, Step{
-				Name: "Install Go Bin Tools",
-				If:   "runner.os == 'Linux'",
-				Run:  "go install github.com/mh-cbon/go-bin-deb@latest && go install github.com/mh-cbon/go-bin-rpm@latest",
+				Name:  "Install Go Bin Tools",
+				If:    "runner.os == 'Linux'",
+				Run:   "go install github.com/mh-cbon/go-bin-deb@latest && go install github.com/mh-cbon/go-bin-rpm@latest",
+				Shell: "bash",
 			})
 		case "rust":
 			steps = append(steps, Step{
@@ -258,33 +261,38 @@ func (p *GithubProvider) addCIRequirementSteps(steps []Step, eng engine.BuildEng
 			})
 		case "cross-linker:linux-aarch64":
 			steps = append(steps, Step{
-				Name: "Install ARM Linker",
-				If:   "runner.os == 'Linux'",
-				Run:  "sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu",
+				Name:  "Install ARM Linker",
+				If:    "runner.os == 'Linux'",
+				Run:   "sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu",
+				Shell: "bash",
 			})
 		case "pkg:musl-tools":
 			steps = append(steps, Step{
-				Name: "Install Musl Tools",
-				If:   "runner.os == 'Linux'",
-				Run:  "sudo apt-get update && sudo apt-get install -y musl-tools",
+				Name:  "Install Musl Tools",
+				If:    "runner.os == 'Linux'",
+				Run:   "sudo apt-get update && sudo apt-get install -y musl-tools",
+				Shell: "bash",
 			})
 		case "pkg:cargo-deb":
 			steps = append(steps, Step{
-				Name: "Install cargo-deb",
-				If:   "runner.os == 'Linux'",
-				Run:  "cargo install cargo-deb",
+				Name:  "Install cargo-deb",
+				If:    "runner.os == 'Linux'",
+				Run:   "cargo install cargo-deb",
+				Shell: "bash",
 			})
 		case "pkg:cargo-generate-rpm":
 			steps = append(steps, Step{
-				Name: "Install cargo-generate-rpm",
-				If:   "runner.os == 'Linux'",
-				Run:  "cargo install cargo-generate-rpm",
+				Name:  "Install cargo-generate-rpm",
+				If:    "runner.os == 'Linux'",
+				Run:   "cargo install cargo-generate-rpm",
+				Shell: "bash",
 			})
 		case "pkg:cargo-wix":
 			steps = append(steps, Step{
-				Name: "Install cargo-wix",
-				If:   "runner.os == 'Windows'",
-				Run:  "cargo install cargo-wix",
+				Name:  "Install cargo-wix",
+				If:    "runner.os == 'Windows'",
+				Run:   "cargo install cargo-wix",
+				Shell: "bash",
 			})
 		}
 	}
@@ -295,8 +303,9 @@ func (p *GithubProvider) addCIRequirementSteps(steps []Step, eng engine.BuildEng
 func (p *GithubProvider) getBuildArtifactStep(cfg *config.Config) []Step {
 	if cfg.BuildRefinery != nil && cfg.BuildRefinery.Enabled {
 		return []Step{{
-			Name: "Build Artifact using Local Refinery",
-			Run:  "./refinery-local build --artifact ${{ matrix.artifact }} --os ${{ matrix.os }} --arch ${{ matrix.arch }}${{ matrix.abi != '' && format(' --abi {0}', matrix.abi) || '' }} --version ${{ github.ref_name }}",
+			Name:  "Build Artifact using Local Refinery",
+			Run:   "./refinery-local build --artifact ${{ matrix.artifact }} --os ${{ matrix.os }} --arch ${{ matrix.arch }}${{ matrix.abi != '' && format(' --abi {0}', matrix.abi) || '' }} --version ${{ github.ref_name }}",
+			Shell: "bash",
 		}}
 	}
 	return []Step{{
@@ -334,6 +343,7 @@ func (p *GithubProvider) createGithubStep(step config.BuildStep, prefix string) 
 		ghStep.With = step.With
 	} else if len(step.Command) > 0 {
 		ghStep.Run = strings.Join(step.Command, "\n")
+		ghStep.Shell = "bash"
 	}
 	if len(step.OS) > 0 {
 		var conditions []string
@@ -400,7 +410,11 @@ func (p *GithubProvider) assembleJobs(include []map[string]any, setup, build, te
 				Uses: ActionDownloadArtifact,
 				With: map[string]any{"path": "./artifacts", "merge-multiple": true},
 			},
-			{Name: "List Artifacts", Run: "find ./artifacts -type f | sort"},
+			{
+				Name:  "List Artifacts",
+				Run:   "find ./artifacts -type f | sort",
+				Shell: "bash",
+			},
 			{
 				Name: "Publish Release",
 				Uses: ActionGHRelease,
