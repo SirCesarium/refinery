@@ -171,7 +171,7 @@ func (e *RustEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts 
 }
 
 func (e *RustEngine) Package(cfg *config.Config, art *config.ArtifactConfig, opts engine.BuildOptions, format string) error {
-	return e.pkg(cfg, art, opts.ArtifactName, opts.OS, opts.Arch, opts.ABI, format)
+	return e.pkg(cfg, art, opts.ArtifactName, opts.OS, opts.Arch, opts.ABI, opts.Version, format)
 }
 
 func (e *RustEngine) ValidateRustSpecific(cfg *config.Config) error {

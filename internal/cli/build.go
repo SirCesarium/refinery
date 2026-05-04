@@ -17,6 +17,7 @@ var (
 	osName  string
 	arch    string
 	abi     string
+	version string
 )
 
 // buildCmd handles building and packaging artifacts.
@@ -51,10 +52,11 @@ var buildCmd = &cobra.Command{
 			OS:           osName,
 			Arch:         arch,
 			ABI:          abi,
+			Version:      version,
 		}
 
 		ui.Section("Building")
-		ui.Info("Target: %s-%s-%s", osName, arch, abi)
+		ui.Info("Target: %s-%s-%s (Version: %s)", osName, arch, abi, version)
 
 		// Execute build.
 		if err := eng.Build(cfg, art, opts); err != nil {
@@ -85,6 +87,7 @@ func init() {
 	buildCmd.Flags().StringVar(&osName, "os", "", "Target OS")
 	buildCmd.Flags().StringVar(&arch, "arch", "", "Target Architecture")
 	buildCmd.Flags().StringVar(&abi, "abi", "", "Target ABI")
+	buildCmd.Flags().StringVar(&version, "version", "0.0.0", "Version for the build")
 
 	buildCmd.MarkFlagRequired("artifact")
 	buildCmd.MarkFlagRequired("os")

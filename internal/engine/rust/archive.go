@@ -13,7 +13,7 @@ import (
 )
 
 // archiveArtifactFiles adds build outputs and headers to a tar or zip archive.
-func (e *RustEngine) archiveArtifactFiles(tw *tar.Writer, zw *zip.Writer, cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi string, manifest *cargoManifest) error {
+func (e *RustEngine) archiveArtifactFiles(tw *tar.Writer, zw *zip.Writer, cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi, version string, manifest *cargoManifest) error {
 	var buildTypes []string
 	if art.Type == "bin" {
 		buildTypes = []string{"bin"}
@@ -26,7 +26,7 @@ func (e *RustEngine) archiveArtifactFiles(tw *tar.Writer, zw *zip.Writer, cfg *c
 
 	for _, bt := range buildTypes {
 		ext, _ := e.getExtAndPrefix(osName, abi, art.Type, bt)
-		finalName := cfg.Naming.Resolve(cfg.Naming.Binary, artifactName, osName, arch, manifest.Package.Version, abi, ext)
+		finalName := cfg.Naming.Resolve(cfg.Naming.Binary, artifactName, osName, arch, version, abi, ext)
 		filePath := filepath.Join(cfg.OutputDir, finalName)
 
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {

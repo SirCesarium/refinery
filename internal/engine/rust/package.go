@@ -13,14 +13,19 @@ import (
 )
 
 // pkg dispatches packaging to the correct format handler (deb, rpm, msi, etc.).
-func (e *RustEngine) pkg(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi, format string) error {
+func (e *RustEngine) pkg(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi, version, format string) error {
+	manifest := e.loadManifestOrFatal()
+	if (version == "" || version == "0.0.0") && manifest != nil {
+		version = manifest.Package.Version
+	}
+
 	switch format {
 	case "deb", "rpm", "msi":
 		return e.handleSystemPackage(cfg, art, artifactName, osName, arch, abi, format)
 	case "tar.gz", "targz":
-		return e.createTarGz(cfg, art, artifactName, osName, arch, abi, e.loadManifestOrFatal())
+		return e.createTarGz(cfg, art, artifactName, osName, arch, abi, version, manifest)
 	case "zip":
-		return e.createZip(cfg, art, artifactName, osName, arch, abi, e.loadManifestOrFatal())
+		return e.createZip(cfg, art, artifactName, osName, arch, abi, version, manifest)
 	default:
 		return fmt.Errorf("unsupported package format: %s", format)
 	}
@@ -88,8 +93,8 @@ func (e *RustEngine) loadManifestOrFatal() *cargoManifest {
 }
 
 // createTarGz creates a .tar.gz package from built artifacts.
-func (e *RustEngine) createTarGz(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi string, manifest *cargoManifest) error {
-	packageName := cfg.Naming.Resolve(cfg.Naming.Package, artifactName, osName, arch, manifest.Package.Version, abi, "tar.gz")
+func (e *RustEngine) createTarGz(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi, version string, manifest *cargoManifest) error {
+	packageName := cfg.Naming.Resolve(cfg.Naming.Package, artifactName, osName, arch, version, abi, "tar.gz")
 	outPath := filepath.Join(cfg.OutputDir, packageName)
 
 	f, err := os.Create(outPath)
@@ -104,13 +109,13 @@ func (e *RustEngine) createTarGz(cfg *config.Config, art *config.ArtifactConfig,
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
 
-	return e.archiveArtifactFiles(tw, nil, cfg, art, artifactName, osName, arch, abi, manifest)
+	return e.archiveArtifactFiles(tw, nil, cfg, art, artifactName, osName, arch, abi, version, manifest)
 }
 
 // createTarGz creates a .tar.gz package from built artifacts.
 
-func (e *RustEngine) createZip(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi string, manifest *cargoManifest) error {
-	packageName := cfg.Naming.Resolve(cfg.Naming.Package, artifactName, osName, arch, manifest.Package.Version, abi, "zip")
+func (e *RustEngine) createZip(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi, version string, manifest *cargoManifest) error {
+	packageName := cfg.Naming.Resolve(cfg.Naming.Package, artifactName, osName, arch, version, abi, "zip")
 	outPath := filepath.Join(cfg.OutputDir, packageName)
 
 	f, err := os.Create(outPath)
@@ -122,5 +127,5 @@ func (e *RustEngine) createZip(cfg *config.Config, art *config.ArtifactConfig, a
 	zw := zip.NewWriter(f)
 	defer zw.Close()
 
-	return e.archiveArtifactFiles(nil, zw, cfg, art, artifactName, osName, arch, abi, manifest)
+	return e.archiveArtifactFiles(nil, zw, cfg, art, artifactName, osName, arch, abi, version, manifest)
 }

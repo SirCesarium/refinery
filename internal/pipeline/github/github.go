@@ -296,7 +296,7 @@ func (p *GithubProvider) getBuildArtifactStep(cfg *config.Config) []Step {
 	if cfg.BuildRefinery != nil && cfg.BuildRefinery.Enabled {
 		return []Step{{
 			Name: "Build Artifact using Local Refinery",
-			Run:  "./refinery-local build --artifact ${{ matrix.artifact }} --os ${{ matrix.os }} --arch ${{ matrix.arch }}${{ matrix.abi != '' && format(' --abi {0}', matrix.abi) || '' }}",
+			Run:  "./refinery-local build --artifact ${{ matrix.artifact }} --os ${{ matrix.os }} --arch ${{ matrix.arch }}${{ matrix.abi != '' && format(' --abi {0}', matrix.abi) || '' }} --version ${{ github.ref_name }}",
 		}}
 	}
 	return []Step{{
@@ -307,7 +307,7 @@ func (p *GithubProvider) getBuildArtifactStep(cfg *config.Config) []Step {
 			"os":       "${{ matrix.os }}",
 			"arch":     "${{ matrix.arch }}",
 			"abi":      "${{ matrix.abi }}",
-			"version":  cfg.RefineryVersion,
+			"version":  "${{ github.ref_name }}",
 		},
 	}}
 }

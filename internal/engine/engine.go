@@ -11,6 +11,7 @@ type BuildOptions struct {
 	OS           string
 	Arch         string
 	ABI          string
+	Version      string
 }
 
 // BuildEngine defines the interface for language-specific build engines.

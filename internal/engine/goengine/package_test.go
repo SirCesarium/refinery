@@ -45,7 +45,7 @@ func TestPkgTarGz(t *testing.T) {
 		},
 	}
 
-	if err := e.pkg(cfg, cfg.Artifacts["test-app"], "test-app", "linux", "amd64", "", "tar.gz"); err != nil {
+	if err := e.pkg(cfg, cfg.Artifacts["test-app"], "test-app", "linux", "amd64", "", "0.0.0", "tar.gz"); err != nil {
 		t.Errorf("pkg tar.gz failed: %v", err)
 	}
 
@@ -92,7 +92,7 @@ func TestPkgZip(t *testing.T) {
 		},
 	}
 
-	if err := e.pkg(cfg, cfg.Artifacts["test-app"], "test-app", "windows", "amd64", "", "zip"); err != nil {
+	if err := e.pkg(cfg, cfg.Artifacts["test-app"], "test-app", "windows", "amd64", "", "0.0.0", "zip"); err != nil {
 		t.Errorf("pkg zip failed: %v", err)
 	}
 
@@ -111,7 +111,7 @@ func TestPkgUnsupportedFormat(t *testing.T) {
 		},
 	}
 
-	if err := e.pkg(cfg, cfg.Artifacts["test"], "test", "linux", "amd64", "", "deb"); err == nil {
+	if err := e.pkg(cfg, cfg.Artifacts["test"], "test", "linux", "amd64", "", "0.0.0", "deb"); err == nil {
 		t.Error("expected error for unsupported format 'deb'")
 	}
 }

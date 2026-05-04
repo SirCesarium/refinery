@@ -13,20 +13,20 @@ import (
 )
 
 // pkg dispatches packaging to the correct format handler.
-func (e *GoEngine) pkg(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi, format string) error {
+func (e *GoEngine) pkg(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi, version, format string) error {
 	switch format {
 	case "tar.gz", "targz":
-		return e.createTarGz(cfg, art, artifactName, osName, arch, abi)
+		return e.createTarGz(cfg, art, artifactName, osName, arch, abi, version)
 	case "zip":
-		return e.createZip(cfg, art, artifactName, osName, arch, abi)
+		return e.createZip(cfg, art, artifactName, osName, arch, abi, version)
 	default:
 		return fmt.Errorf("unsupported package format: %s", format)
 	}
 }
 
 // createTarGz creates a .tar.gz package from built artifacts.
-func (e *GoEngine) createTarGz(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi string) error {
-	packageName := cfg.Naming.Resolve(cfg.Naming.Package, artifactName, osName, arch, "0.0.0", abi, "tar.gz")
+func (e *GoEngine) createTarGz(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi, version string) error {
+	packageName := cfg.Naming.Resolve(cfg.Naming.Package, artifactName, osName, arch, version, abi, "tar.gz")
 	outPath := filepath.Join(cfg.OutputDir, packageName)
 
 	f, err := os.Create(outPath)
@@ -41,12 +41,12 @@ func (e *GoEngine) createTarGz(cfg *config.Config, art *config.ArtifactConfig, a
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
 
-	return e.archiveArtifactFiles(tw, nil, cfg, art, artifactName, osName, arch, abi)
+	return e.archiveArtifactFiles(tw, nil, cfg, art, artifactName, osName, arch, abi, version)
 }
 
 // createZip creates a .zip package from built artifacts.
-func (e *GoEngine) createZip(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi string) error {
-	packageName := cfg.Naming.Resolve(cfg.Naming.Package, artifactName, osName, arch, "0.0.0", abi, "zip")
+func (e *GoEngine) createZip(cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi, version string) error {
+	packageName := cfg.Naming.Resolve(cfg.Naming.Package, artifactName, osName, arch, version, abi, "zip")
 	outPath := filepath.Join(cfg.OutputDir, packageName)
 
 	f, err := os.Create(outPath)
@@ -58,13 +58,13 @@ func (e *GoEngine) createZip(cfg *config.Config, art *config.ArtifactConfig, art
 	zw := zip.NewWriter(f)
 	defer zw.Close()
 
-	return e.archiveArtifactFiles(nil, zw, cfg, art, artifactName, osName, arch, abi)
+	return e.archiveArtifactFiles(nil, zw, cfg, art, artifactName, osName, arch, abi, version)
 }
 
 // archiveArtifactFiles adds built artifacts to a tar or zip archive.
-func (e *GoEngine) archiveArtifactFiles(tw *tar.Writer, zw *zip.Writer, cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi string) error {
+func (e *GoEngine) archiveArtifactFiles(tw *tar.Writer, zw *zip.Writer, cfg *config.Config, art *config.ArtifactConfig, artifactName, osName, arch, abi, version string) error {
 	ext, _ := e.getExtAndPrefix(osName, art.Type)
-	finalName := cfg.Naming.Resolve(cfg.Naming.Binary, artifactName, osName, arch, "0.0.0", abi, ext)
+	finalName := cfg.Naming.Resolve(cfg.Naming.Binary, artifactName, osName, arch, version, abi, ext)
 
 	filePath := filepath.Join(cfg.OutputDir, finalName)
 

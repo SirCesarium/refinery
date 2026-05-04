@@ -101,7 +101,7 @@ version = "1.0.0"
 		Arch:         "x86_64",
 	}
 
-	binaryName, binaryPath := e.resolveBinaryInfo(cfg, art, opts, m, "x86_64-unknown-linux-gnu", "release")
+	binaryName, binaryPath := e.resolveBinaryInfo(cfg, art, opts, m, "x86_64-unknown-linux-gnu", "release", "1.0.0")
 	if binaryName == "" {
 		t.Error("expected non-empty binary name")
 	}

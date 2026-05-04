@@ -134,6 +134,7 @@ func TestGoBuildSmoke(t *testing.T) {
 		ArtifactName: "app",
 		OS:           "linux",
 		Arch:         "amd64",
+		Version:      "0.0.0",
 	}
 
 	if err := eng.Build(cfg, art, opts); err != nil {
@@ -211,6 +212,7 @@ func main() {
 		ArtifactName: "app",
 		OS:           "linux",
 		Arch:         "amd64",
+		Version:      "0.0.0",
 	}
 
 	if err := eng.Build(cfg, art, opts); err != nil {

@@ -66,7 +66,7 @@ func (e *GoEngine) Build(cfg *config.Config, art *config.ArtifactConfig, opts en
 
 // Package creates distribution packages for the built artifact.
 func (e *GoEngine) Package(cfg *config.Config, art *config.ArtifactConfig, opts engine.BuildOptions, format string) error {
-	return e.pkg(cfg, art, opts.ArtifactName, opts.OS, opts.Arch, opts.ABI, format)
+	return e.pkg(cfg, art, opts.ArtifactName, opts.OS, opts.Arch, opts.ABI, opts.Version, format)
 }
 
 // GetCIRequirements returns necessary tools for CI based on config.

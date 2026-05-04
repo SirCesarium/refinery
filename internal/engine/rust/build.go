@@ -30,8 +30,12 @@ func (e *RustEngine) build(cfg *config.Config, art *config.ArtifactConfig, opts 
 		return err
 	}
 
-	version := manifest.Package.Version
-	_, binaryPath := e.resolveBinaryInfo(cfg, art, opts, manifest, targetTriple, profile)
+	version := opts.Version
+	if version == "" || version == "0.0.0" {
+		version = manifest.Package.Version
+	}
+
+	_, binaryPath := e.resolveBinaryInfo(cfg, art, opts, manifest, targetTriple, profile, version)
 	if err := e.runHooks(art, opts, binaryPath, version, "PreBuild"); err != nil {
 		return err
 	}
@@ -61,8 +65,7 @@ func (e *RustEngine) getProfile(tCfg config.TargetConfig) string {
 }
 
 // resolveBinaryInfo returns the binary name and full path based on naming config.
-func (e *RustEngine) resolveBinaryInfo(cfg *config.Config, art *config.ArtifactConfig, opts engine.BuildOptions, manifest *cargoManifest, targetTriple, profile string) (string, string) {
-	version := manifest.Package.Version
+func (e *RustEngine) resolveBinaryInfo(cfg *config.Config, art *config.ArtifactConfig, opts engine.BuildOptions, manifest *cargoManifest, targetTriple, profile, version string) (string, string) {
 	ext := e.getBinaryExt(art, opts.OS, opts.ABI)
 	binaryName := cfg.Naming.Resolve(cfg.Naming.Binary, opts.ArtifactName, opts.OS, opts.Arch, version, opts.ABI, ext)
 	return binaryName, filepath.Join(cfg.OutputDir, binaryName)

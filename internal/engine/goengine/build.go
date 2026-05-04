@@ -24,7 +24,7 @@ func (e *GoEngine) build(cfg *config.Config, art *config.ArtifactConfig, opts en
 		return err
 	}
 
-	binaryName, binaryPath := e.resolveBinaryInfo(cfg, art, opts, "0.0.0")
+	binaryName, binaryPath := e.resolveBinaryInfo(cfg, art, opts, opts.Version)
 	_ = binaryPath
 
 	if err := e.runHooks(art, opts, binaryName, "PreBuild"); err != nil {
@@ -51,7 +51,7 @@ func (e *GoEngine) resolveBinaryInfo(cfg *config.Config, art *config.ArtifactCon
 
 // runGoBuild executes 'go build' with the appropriate GOOS and GOARCH environment variables.
 func (e *GoEngine) runGoBuild(cfg *config.Config, art *config.ArtifactConfig, opts engine.BuildOptions, manifest *goModManifest) error {
-	outputName, _ := e.resolveBinaryInfo(cfg, art, opts, "0.0.0")
+	outputName, _ := e.resolveBinaryInfo(cfg, art, opts, opts.Version)
 
 	if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
 		return err
@@ -88,7 +88,7 @@ func (e *GoEngine) runGoBuild(cfg *config.Config, art *config.ArtifactConfig, op
 
 // runHooks executes either pre-build or post-build hooks.
 func (e *GoEngine) runHooks(art *config.ArtifactConfig, opts engine.BuildOptions, binaryPath string, hookType string) error {
-	resolvedHooks := art.Hooks.ResolveAll(opts.ArtifactName, opts.OS, opts.Arch, "0.0.0", opts.ABI, binaryPath)
+	resolvedHooks := art.Hooks.ResolveAll(opts.ArtifactName, opts.OS, opts.Arch, opts.Version, opts.ABI, binaryPath)
 
 	var hooks []string
 	if hookType == "PreBuild" {
