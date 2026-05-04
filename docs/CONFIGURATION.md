@@ -45,9 +45,9 @@ Defines a specific build unit. The `<name>` key must match the component name de
 - **`headers`** (boolean): If `true`, includes `.h` and `.hpp` files in archive packages.
 
 ### [artifacts.<name>.targets.<id>]
-Platform-specific build configurations.
+Platform-specific build configurations. The `<id>` is an arbitrary, unique string used to identify the target block (e.g., `"linux-x64"`, `"legacy"`, or `"desktop"`).
 
-- **`os`** (string, required): Target OS (`"linux"`, `"windows"`, `"darwin"`, `"wasm"`, `"wasi"`).
+- **`os`** (string): Target operating system (`"linux"`, `"windows"`, `"darwin"`, `"wasm"`, `"wasi"`). If omitted, Refinery defaults the OS to the value of `<id>`.
 - **`archs`** (list of strings, required): Target architectures (e.g., `["x86_64", "aarch64"]`).
 - **`abis`** (list of strings): Target ABIs (e.g., `["gnu", "musl", "msvc"]`).
 - **`runner`** (string): Custom GitHub runner image for this target (optional).
@@ -153,7 +153,7 @@ library_types = ["cdylib", "staticlib"]
 packages = ["zip"]
 headers = true
 
-[artifacts.refinery-core.targets.desktop]
+[artifacts.refinery-core.targets.linux]
 os = "linux"
 archs = ["x86_64"]
 abis = ["gnu"]
