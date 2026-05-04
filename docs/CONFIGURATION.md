@@ -35,7 +35,7 @@ Configuration for projects that need to build the Refinery binary itself from so
 - **`enabled`** (boolean): Enables building Refinery from source.
 - **`source`** (string): Path to Refinery source code (e.g., `"./cmd/refinery"`).
 
-## [artifacts.<name>]
+## [artifacts.\<name\>]
 Defines a specific build unit. The `<name>` key must match the component name defined in your language manifest (e.g., the `name` field in `Cargo.toml` for `[[bin]]` or `[lib]`). Refinery uses this name to locate the compiled files.
 
 - **`type`** (string, required): Either `"bin"` (executable) or `"lib"` (library).
@@ -44,7 +44,7 @@ Defines a specific build unit. The `<name>` key must match the component name de
 - **`packages`** (list of strings): Distribution formats: `"deb"`, `"rpm"`, `"msi"`, `"tar.gz"`, `"zip"`.
 - **`headers`** (boolean): If `true`, includes `.h` and `.hpp` files in archive packages.
 
-### [artifacts.<name>.targets.<id>]
+### [artifacts.\<name\>.targets.\<id\>]
 Platform-specific build configurations. The `<id>` is an arbitrary, unique string used to identify the target block (e.g., `"linux-x64"`, `"legacy"`, or `"desktop"`).
 
 - **`os`** (string): Target operating system (`"linux"`, `"windows"`, `"darwin"`, `"wasm"`, `"wasi"`). If omitted, Refinery defaults the OS to the value of `<id>`.
